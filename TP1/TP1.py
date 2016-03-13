@@ -22,6 +22,9 @@ TRUTH_PATH = CURRENT_PATH + "/pictures/truth/"
 RESULT_PATH = CURRENT_PATH + "/pictures/result_%s/"
 
 
+DATASET_SIZE = 78
+
+
 class Image(object):
     def __init__(self, name, _type=None):
         """
@@ -189,6 +192,23 @@ class PeerSkinDetector(AbstractSkinDetector):
         self.result.save()
 
 
+def benchmark_peer():
+    """
+    Run la méthode de Peer et Al sur tout le dataset.
+    Calcule la précision moyenne et son écart-type
+    """
+    accuracies = []
+    for i in range(1, DATASET_SIZE + 1):
+        print("Processing image %s/%s" % (i, DATASET_SIZE))
+        detector = PeerSkinDetector(str(i))
+        accuracies.append(detector.accuracy())
+
+    avg = np.mean(accuracies)
+    std = np.std(accuracies)
+    print("Précision moyenne: %s \nEcart type: %s" % (avg, std))
+    return avg, std
+
 if __name__ == "__main__":
-    c = PeerSkinDetector('06Apr03Face')
-    print c.accuracy()
+    avg, std = benchmark_peer()
+    # Précision moyenne: 0.782445833341
+    # Ecart type: 0.168097004244
