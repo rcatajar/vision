@@ -4,54 +4,116 @@
 Introduction a la vision par ordinateur
 TP 1 : Detection de visages
 
-Code a été testé avec OpenCV 3.1.0 et python 2.7.11
+Code testé avec OpenCV 3.1.0 et python 2.7.11
 
 Romain CATAJAR
 romain.catajar@student.ecp.fr
 '''
 
 import os
-from copy import deepcopy
 
 import numpy as np
-from matplotlib import pyplot as plt
 import cv2
 
 # où sont enregistrer les images, et où les sauvegarder
 CURRENT_PATH = os.getcwd()
 IMAGE_PATH = CURRENT_PATH + "/pictures/original/"
 TRUTH_PATH = CURRENT_PATH + "/pictures/truth/"
-RESULT_PATH = CURRENT_PATH + "/pictures/result/"
+RESULT_PATH = CURRENT_PATH + "/pictures/result_%s/"
 
 
-def print_image(image):
-    '''
-    Affiche l'image donnee en argument
-    '''
-    cv2.imshow('image', image)
-    cv2.waitKey(0)
-    cv2.destroyWindow('image')
+class Image(object):
+    def __init__(self, name, _type=None):
+        """
+        Load ou crée l'image au nom donnée
+        du type donné
+
+        Args:
+            - name (str): nom de l'image
+            - _type (Optional[str]): type de l'image
+                                    (None pour original, "truth" ou nom de la méthode)
+        """
+        self.name = name
+
+        if _type is None:
+            self.set_original()
+        elif _type == "truth":
+            self.set_truth()
+        else:
+            self.set_result(_type)
+
+        self.load()
+
+    def set_original(self):
+        self.path = IMAGE_PATH + self.name + '.jpg'
+
+    def set_truth(self):
+        self.path = TRUTH_PATH + self.name + '.png'
+
+    def set_result(self, _type):
+        # pour un resultat, on commence par faire une copie
+        # de l'image originale
+        self.set_original()
+        self.load()
+        self.path = RESULT_PATH % _type + self.name + '.jpg'
+        self.save()
+
+    def load(self):
+        self.img = cv2.imread(self.path, 1)
+
+    def save(self):
+        cv2.imwrite(self.path, self.img)
+
+    def show(self):
+        """
+        Affiche l'image
+        """
+        cv2.imshow(self.name, self.img)
+        cv2.waitKey(0)
+        cv2.destroyWindow(self.name)
+
+    @property
+    def size(self):
+        """
+        Taille de l'image (hauteur, largeur)
+        """
+        height, width, _ = self.img.shape
+        return height, width
+
+    def pixels(self, with_coords=False):
+        """
+        Itère sur tous les pixels de l'image
+
+        Par default, yield les pixels [B, G, R]
+        un par un
+
+        Si with_coords est True, yield des triplets
+        (i, j, pixel) avec:
+            - i, j coordonnées du pixel
+            - pixel: liste [B, G, R]
+        """
+        height, width = self.size
+        for i in range(height):
+            for j in range(width):
+                if with_coords:
+                    yield i, j, self.img[i][j]
+                else:
+                    yield self.img[i][j]
+
+    def set_pixel(self, i, j, pixel):
+        """
+        Modifie le pixel (i, j) de l'image
+        par le pixel passé en argument
+        """
+        self.img[i][j] = pixel
 
 
-class Colors(object):
-    white = [255, 255, 255]
-    black = [0, 0, 0]
+class Pixel(object):
+    WHITE = [255, 255, 255]
+    BLACK = [0, 0, 0]
 
-
-class SkinDetector(object):
-    '''
-    Applique differentes methodes de detection de la peau
-    a une image et compare les resultats a ceux du dataset
-    '''
-
-    def __init__(self, image_name):
-        print IMAGE_PATH + image_name
-        self.original = cv2.imread(IMAGE_PATH + image_name + '.jpg', 1)
-        self.truth = cv2.imread(TRUTH_PATH + image_name + '.png', 1)
-        self.name = image_name
-
-    # question 4.2.2
-    def is_skin(self, pixel):
+    @staticmethod
+    def is_skin(pixel):
         '''
         Renvoi True si le pixel est de la peau, False sinon
 
@@ -80,46 +142,53 @@ class SkinDetector(object):
         # Renvoi True si toutes les regles sont verifies sinon False
         return True if all(rules) else False
 
-    # question 4.2.2
-    def first_method(self):
-        '''
-        Applique la regle de Peer et al sur l'image.
-        Le resultat est une image ou les pixels sont en blanc
-        pour la peau, noir sinon.
-        '''
-        # On fait une copie de l'image originale pour etre sur
-        # de ne pas l'alterer
-        image = deepcopy(self.original)
-        height, width, _ = image.shape
-        # Parcoure tous les pixels
-        for i in range(height):
-            for j in range(width):
-                if self.is_skin(image[i][j]):
-                    # peau colorie en blanc
-                    image[i][j] = Colors.white
-                else:
-                    # non peau colorie en noir
-                    image[i][j] = Colors.black
-        self.first_method_result = image
-        # Sauvegarde le resultat dans un fichier
-        cv2.imwrite(RESULT_PATH + 'first_method_' + self.name + '.jpg', image)
 
-    # question 4.2.2
-    def accuracy_first_method(self):
+class AbstractSkinDetector(object):
+    METHOD_NAME = ""
+
+    def __init__(self, img_name):
+        self.original = Image(img_name)
+        self.truth = Image(img_name, "truth")
+        self.result = Image(img_name, self.METHOD_NAME)
+        self.process()
+
+    def process(self):
         """
-        Calcule la precision de chaque methode en comparant
-        les resultats a celui du dataset (truth)
+        Applique l'algo de detection de la peau et colorie
+        l'image en blanc pour la peau et noir pour le reste
         """
-        height, width, _ = self.truth.shape
-        count = 0  # nombre de pixels bien predit
-        for i in range(height):
-            for j in range(width):
-                if np.array_equal(self.truth[i][j], self.first_method_result[i][j]):
-                    count += 1
+        raise NotImplementedError()
+
+    def accuracy(self):
+        """
+        Calcule la précision de la detection en comparant aux
+        resultats fournis avec le dataset
+        """
+        count = 0  # compteur de pixels bien prédit
+        for (pixel_result, pixel_truth) in zip(self.result.pixels(), self.truth.pixels()):
+            if np.array_equal(pixel_result, pixel_truth):
+                count += 1
+
+        # Calcul de l'accuracy:  nb_bonne_prédiction / (largeur * hauteur)
+        height, width = self.original.size
         return count / float(height * width)
 
 
+class PeerSkinDetector(AbstractSkinDetector):
+    """
+    Utilise la méthode de Peer et Al pour detecter la peau
+    """
+    METHOD_NAME = "peer_et_al"
+
+    def process(self):
+        for i, j, pixel in self.result.pixels(with_coords=True):
+            if Pixel.is_skin(pixel):
+                self.result.set_pixel(i, j, Pixel.WHITE)
+            else:
+                self.result.set_pixel(i, j, Pixel.BLACK)
+        self.result.save()
+
+
 if __name__ == "__main__":
-    c = SkinDetector('06Apr03Face')
-    c.first_method()
-    print c.accuracy_first_method()
+    c = PeerSkinDetector('06Apr03Face')
+    print c.accuracy()
