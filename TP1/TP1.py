@@ -14,6 +14,10 @@ import os
 
 import numpy as np
 import cv2
+from matplotlib import pyplot as plt
+
+# active des print de debug
+DEBUG = True
 
 # où sont enregistrer les images, et où les sauvegarder
 CURRENT_PATH = os.getcwd()
@@ -23,6 +27,33 @@ RESULT_PATH = CURRENT_PATH + "/pictures/result_%s/"
 
 
 DATASET_SIZE = 78
+# On sépare le dataset en deux partie
+# 2/3 pour l'entrainement
+# 1/3 pour tester
+
+
+def train_dataset():
+    """
+    Liste le nom des images pour l'entrainement
+    """
+    # 2/3 du dataset
+    limit = (2 * DATASET_SIZE) / 3
+    for i in range(1, limit):
+        if DEBUG:
+            print("[train] image %s/%s" % (i, limit - 1))
+        # Les fichiers des images sont nommés 1(.jpg), 2, 3, ...
+        yield str(i)
+
+
+def test_dataset():
+    """
+    Liste le nom des images pour les tests
+    """
+    limit = (2 * DATASET_SIZE) / 3
+    for i in range(limit, DATASET_SIZE + 1):
+        if DEBUG:
+            print("[test] image %s/%s" % (i - limit + 1, DATASET_SIZE - limit + 1))
+        yield str(i)
 
 
 class Image(object):
@@ -33,8 +64,8 @@ class Image(object):
 
         Args:
             - name (str): nom de l'image
-            - _type (Optional[str]): type de l'image
-                                    (None pour original, "truth" ou nom de la méthode)
+            - _type (Optional[str]): type de l'image (original par defaut,
+                                     "truth" ou nom de la méthode)
         """
         self.name = name
 
@@ -75,6 +106,18 @@ class Image(object):
         cv2.waitKey(0)
         cv2.destroyWindow(self.name)
 
+    def switch_color_space(self, space):
+        # La converstion ne marche que si l'image est
+        # actuellement en BGR (ce qui est le cas par default)
+        if space == "HSV":
+            color = cv2.COLOR_BGR2HSV
+        elif space == "RGB":
+            color = cv2.COLOR_BGR2RGB
+        elif space == "LAB":
+            color = cv2.COLOR_BGR2LAB
+        self.img = cv2.cvtColor(self.img, color)
+        return self
+
     @property
     def size(self):
         """
@@ -87,13 +130,10 @@ class Image(object):
         """
         Itère sur tous les pixels de l'image
 
-        Par default, yield les pixels [B, G, R]
-        un par un
+        Par default, yield les pixels un par un
 
         Si with_coords est True, yield des triplets
-        (i, j, pixel) avec:
-            - i, j coordonnées du pixel
-            - pixel: liste [B, G, R]
+        (i, j, pixel) avec i, j coordonnées du pixel
         """
         height, width = self.size
         for i in range(height):
@@ -130,7 +170,7 @@ class Pixel(object):
             - R > G
             - R > B
         '''
-        B, G, R = pixel  # pixel donnee en BGR par opencv
+        B, G, R = pixel  # pixel donnee en BGR par default
         rules = [
             R > 96,
             G > 40,
@@ -162,19 +202,32 @@ class AbstractSkinDetector(object):
         """
         raise NotImplementedError()
 
-    def accuracy(self):
+    def rates(self):
         """
-        Calcule la précision de la detection en comparant aux
-        resultats fournis avec le dataset
+        Calcule les taux de bonne et mauvaise detection
         """
-        count = 0  # compteur de pixels bien prédit
-        for (pixel_result, pixel_truth) in zip(self.result.pixels(), self.truth.pixels()):
-            if np.array_equal(pixel_result, pixel_truth):
-                count += 1
+        true_positives = 0.  # nb de vrai positif
+        skin = 0.  # nb de pixels de peau dans l'original
+        false_positives = 0.  # nb de faux positif
+        not_skin = 0.  # nb de pixels de non peau dans l'original
 
-        # Calcul de l'accuracy:  nb_bonne_prédiction / (largeur * hauteur)
-        height, width = self.original.size
-        return count / float(height * width)
+        for (pixel_result, pixel_truth) in zip(self.result.pixels(), self.truth.pixels()):
+            if np.array_equal(pixel_truth, Pixel.WHITE):
+                # pixel de peau
+                skin += 1
+                if np.array_equal(pixel_result, Pixel.WHITE):
+                    # vrai positif
+                    true_positives += 1
+            else:
+                # pixel de non peau
+                not_skin += 1
+                if np.array_equal(pixel_result, Pixel.WHITE):
+                    # faux positif
+                    false_positives += 1
+
+        true_positive_rate = true_positives / skin
+        false_positive_rate = false_positives / not_skin
+        return true_positive_rate, false_positive_rate
 
 
 class PeerSkinDetector(AbstractSkinDetector):
@@ -194,21 +247,103 @@ class PeerSkinDetector(AbstractSkinDetector):
 
 def benchmark_peer():
     """
-    Run la méthode de Peer et Al sur tout le dataset.
-    Calcule la précision moyenne et son écart-type
+    Run la méthode de Peer et Al sur tout le dataset de test.
+    Calcule les taux de bonne et mauvaise detection moyen et
+    leur ecart type
     """
-    accuracies = []
-    for i in range(1, DATASET_SIZE + 1):
-        print("Processing image %s/%s" % (i, DATASET_SIZE))
-        detector = PeerSkinDetector(str(i))
-        accuracies.append(detector.accuracy())
+    true_positive_rates = []
+    false_positive_rates = []
 
-    avg = np.mean(accuracies)
-    std = np.std(accuracies)
-    print("Précision moyenne: %s \nEcart type: %s" % (avg, std))
-    return avg, std
+    for image_name in test_dataset():
+        detector = PeerSkinDetector(image_name)
+        true_positive_rate, false_positive_rate = detector.rates()
+        true_positive_rates.append(true_positive_rate)
+        false_positive_rates.append(false_positive_rate)
+
+    tp_avg = np.mean(true_positive_rates)
+    tp_std = np.std(true_positive_rates)
+    print("Taux bonne detection: %2f (écart-type: %2f)" % (tp_avg, tp_std))
+
+    fp_avg = np.mean(false_positive_rates)
+    fp_std = np.mean(false_positive_rates)
+    print("Taux mauvaise detection: %2f (écart-type: %2f)" % (fp_avg, fp_std))
+
+
+def histograms(color_space):
+    """
+    Construit les 2 histogrammes peau, non peau pour
+    l'espace de couleur donnée
+    """
+    # Construit une liste de tout les pixels de peau
+    # et de non peau à partir des résultats du datases
+    pixels_skin = []
+    pixels_not_skin = []
+
+    for name in train_dataset():
+        img_real = Image(name).switch_color_space(color_space)
+        img_truth = Image(name, "truth")
+        for pixel_real, pixel_truth in zip(img_real.pixels(), img_truth.pixels()):
+            if np.array_equal(pixel_truth, Pixel.WHITE):
+                pixels_skin.append(pixel_real)
+            else:
+                pixels_not_skin.append(pixel_real)
+
+    # Use the correct np array type
+    pixels_skin = np.array([pixels_skin], dtype=np.int8)
+    pixels_not_skin = np.array([pixels_not_skin], dtype=np.int8)
+
+    # Paramètres des histogrammes en fonction du l'espace de couleur
+    if color_space == "RGB":
+        channels = [0, 1]  # R et G
+        ranges = [0, 256, 0, 256]  # R et G de 0 à 256
+
+    elif color_space == "HSV":
+        channels = [0, 1]  # H et S
+        ranges = [0, 180, 0, 256]  # H de 0 à 180, S de 0 à 256
+
+    elif color_space == "LAB":
+        channels = [1, 2]  # a et b
+        ranges = [-128, 127, -128, 127]  # a et b de -128 à 127
+
+    hist_size = [32, 32]  # réduction de la quantification
+    hist_skin = cv2.calcHist([pixels_skin], channels, None, hist_size, ranges)
+    hist_not_skin = cv2.calcHist([pixels_not_skin], channels, None, hist_size, ranges)
+
+    if DEBUG:
+        print_histogram(hist_skin)
+        print_histogram(hist_not_skin)
+    return hist_skin, hist_not_skin
+
+
+def print_histogram(histogram):
+    """
+    Affiche l'histogramme passé en argument
+    """
+    plt.imshow(histogram, interpolation="nearest")
+    plt.show()
+
+# Build the histograms
+hist_skin_RGB, hist_not_skin_RGB = histograms("RGB")
+hist_skin_HSV, hist_not_skin_HSV = histograms("HSV")  # NOT WORKING ...
+# OpenCV Error: Unsupported format or combination of formats () in
+# calcHist, file
+# /build/buildd/opencv-2.4.8+dfsg1/modules/imgproc/src/histogram.cpp, line
+# 1219
+hist_skin_LAB, hist_not_skin_LAB = histograms("LAB")
+
+
+# Detecter avec ces histogrammes
+# 2 methodes:
+#   - probas basique
+#   - methode de Bayes (tester differentes valeurs de seuil)
+
+# Detecter avec Viola Jones
+
 
 if __name__ == "__main__":
-    avg, std = benchmark_peer()
-    # Précision moyenne: 0.782445833341
-    # Ecart type: 0.168097004244
+    pass
+    # benchmark_peer()
+    # Taux bonne detection: 0.911231 (écart-type: 0.089854)
+    # Taux mauvaise detection: 0.158280 (écart-type: 0.158280)
+    # Exemple d'image ou ca marche mal: 6, 16, 29
+    #                             bien: 59, 76, 78
