@@ -289,8 +289,8 @@ def histograms(color_space):
                 pixels_not_skin.append(pixel_real)
 
     # Use the correct np array type
-    pixels_skin = np.array([pixels_skin], dtype=np.int8)
-    pixels_not_skin = np.array([pixels_not_skin], dtype=np.int8)
+    pixels_skin = np.array([pixels_skin], dtype=np.float32)
+    pixels_not_skin = np.array([pixels_not_skin], dtype=np.float32)
 
     # Paramètres des histogrammes en fonction du l'espace de couleur
     if color_space == "RGB":
@@ -299,7 +299,7 @@ def histograms(color_space):
 
     elif color_space == "HSV":
         channels = [0, 1]  # H et S
-        ranges = [0, 180, 0, 256]  # H de 0 à 180, S de 0 à 256
+        ranges = [0, 360, 0, 1]  # H de 0 à 360, S de 0 à 1
 
     elif color_space == "LAB":
         channels = [1, 2]  # a et b
@@ -324,11 +324,7 @@ def print_histogram(histogram):
 
 # Build the histograms
 hist_skin_RGB, hist_not_skin_RGB = histograms("RGB")
-hist_skin_HSV, hist_not_skin_HSV = histograms("HSV")  # NOT WORKING ...
-# OpenCV Error: Unsupported format or combination of formats () in
-# calcHist, file
-# /build/buildd/opencv-2.4.8+dfsg1/modules/imgproc/src/histogram.cpp, line
-# 1219
+hist_skin_HSV, hist_not_skin_HSV = histograms("HSV")
 hist_skin_LAB, hist_not_skin_LAB = histograms("LAB")
 
 
