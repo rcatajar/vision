@@ -245,30 +245,6 @@ class PeerSkinDetector(AbstractSkinDetector):
         self.result.save()
 
 
-def benchmark_peer():
-    """
-    Run la méthode de Peer et Al sur tout le dataset de test.
-    Calcule les taux de bonne et mauvaise detection moyen et
-    leur ecart type
-    """
-    true_positive_rates = []
-    false_positive_rates = []
-
-    for image_name in test_dataset():
-        detector = PeerSkinDetector(image_name)
-        true_positive_rate, false_positive_rate = detector.rates()
-        true_positive_rates.append(true_positive_rate)
-        false_positive_rates.append(false_positive_rate)
-
-    tp_avg = np.mean(true_positive_rates)
-    tp_std = np.std(true_positive_rates)
-    print("Taux bonne detection: %2f (écart-type: %2f)" % (tp_avg, tp_std))
-
-    fp_avg = np.mean(false_positive_rates)
-    fp_std = np.mean(false_positive_rates)
-    print("Taux mauvaise detection: %2f (écart-type: %2f)" % (fp_avg, fp_std))
-
-
 def histograms(color_space):
     """
     Construit les 2 histogrammes peau, non peau pour
@@ -288,7 +264,7 @@ def histograms(color_space):
             else:
                 pixels_not_skin.append(pixel_real)
 
-    # Use the correct np array type
+    # We need floats for HSV space
     pixels_skin = np.array([pixels_skin], dtype=np.float32)
     pixels_not_skin = np.array([pixels_not_skin], dtype=np.float32)
 
@@ -328,17 +304,123 @@ hist_skin_HSV, hist_not_skin_HSV = histograms("HSV")
 hist_skin_LAB, hist_not_skin_LAB = histograms("LAB")
 
 
+class BasicHistogramDetector(AbstractSkinDetector):
+    """
+    Detecteur de peau basé sur les histogrammes
+
+    Premiere approche "basique". Pour une couleur (a, b)
+        p(peau|c) = p(c|peau) = HistoPeau(a, b)
+        p(!peau|c) = p(c|!peau) = HistoNonPeau(a, b)
+    La plus grande proba donne la classification
+
+    Supporte les espaces de couleurs "RGB", "HSV", "LAB"
+    en argument
+    """
+
+    def __init__(self, img_name, color_space):
+        self.color_space = color_space
+        self.set_histogram()
+        super(BasicHistogramDetector, self).__init__(img_name)
+        self.original.switch_color_space(color_space)
+
+    def set_histogram(self):
+        """
+        Choisit les histogrammes du bon espace de couleur
+        """
+        if self.color_space == "RGB":
+            self.hist_skin = hist_skin_RGB
+            self.hist_not_skin = hist_not_skin_RGB
+
+        elif self.color_space == "HSV":
+            self.hist_skin = hist_skin_HSV
+            self.hist_not_skin = hist_not_skin_HSV
+
+        elif self.color_space == "LAB":
+            self.hist_skin = hist_skin_LAB
+            self.hist_not_skin = hist_not_skin_LAB
+
+    def is_skin(self, a, b):
+        """
+        Calcule proba d'etre peau ou pas à partir des
+        histogrammes et retourne True si peau et False sinon
+        """
+        p_skin = self.hist_skin(a, b)
+        p_not_skin = self.hist_not_skin(a, b)
+        return bool(p_skin > p_not_skin)
+
+    def process(self):
+        for i, j, pixel in self.result.pixels(with_coords=True):
+            # Deux premières coords du pixel utilisé en RGB et HSV
+            # Deux dernières pour LAB
+            if self.color_space in ["RGB", "HSV"]:
+                a, b = pixel[0], pixel[1]
+            else:
+                a, b = pixel[1], pixel[2]
+            if self.is_skin(a, b):
+                self.result.set_pixel(i, j, Pixel.WHITE)
+            else:
+                self.result.set_pixel(i, j, Pixel.BLACK)
+        self.result.save()
+
+
 # Detecter avec ces histogrammes
-# 2 methodes:
-#   - probas basique
 #   - methode de Bayes (tester differentes valeurs de seuil)
 
 # Detecter avec Viola Jones
 
 
+# Benchmark
+def benchmark():
+    """
+    Benchmark les différentes méthodes sur le dataset de test
+    """
+
+    METHODS = {
+        "Peer et Al": (PeerSkinDetector, None),
+        "Histogramme basique (RGB)": (BasicHistogramDetector, "RGB"),
+        "Histogramme basique (LAB)": (BasicHistogramDetector, "LAB"),
+        "Histogramme basique (HSV)": (BasicHistogramDetector, "HSV"),
+
+    }
+
+    results = {}
+
+    # Pour chaque méthode, on teste le detecteur sur tout le dataset de test
+    # On calcule les taux de bonne et mauvaise detection moyens et leurs écart-types
+    for name, data in METHODS.items():
+        if DEBUG:
+            print("Benchmark started for %s" % name)
+        Detector, extra_arg = data
+
+        true_positive_rates = []
+        false_positive_rates = []
+
+        for image_name in test_dataset():
+            detector = Detector(image_name, extra_arg) if extra_arg else Detector(image_name)
+            true_positive_rate, false_positive_rate = detector.rates()
+            true_positive_rates.append(true_positive_rate)
+            false_positive_rates.append(false_positive_rate)
+
+        # tp: true positive / fp: false positive
+        # avg: average     / std: ecart type
+        tp_avg = np.mean(true_positive_rates)
+        tp_std = np.std(true_positive_rates)
+        fp_avg = np.mean(false_positive_rates)
+        fp_std = np.mean(false_positive_rates)
+
+        results[name] = (tp_avg, tp_std, fp_avg, fp_std)
+
+        if DEBUG:
+            print("Benchmark done for %s" % name)
+
+        # Affichage des résultats
+        for name, result in results.items():
+            tp_avg, tp_std, fp_avg, fp_std = result
+            print("[%s] Taux bonne detection: %2f (écart-type: %2f)" % (name, tp_avg, tp_std))
+            print("[%s] Taux mauvaise detection: %2f (écart-type: %2f)" % (name, fp_avg, fp_std))
+
 if __name__ == "__main__":
-    pass
-    # benchmark_peer()
+    benchmark()
     # Taux bonne detection: 0.911231 (écart-type: 0.089854)
     # Taux mauvaise detection: 0.158280 (écart-type: 0.158280)
     # Exemple d'image ou ca marche mal: 6, 16, 29
