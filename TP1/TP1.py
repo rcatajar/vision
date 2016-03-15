@@ -52,7 +52,8 @@ def test_dataset():
     limit = (2 * DATASET_SIZE) / 3
     for i in range(limit, DATASET_SIZE + 1):
         if DEBUG:
-            print("[test] image %s/%s" % (i - limit + 1, DATASET_SIZE - limit + 1))
+            print("[test] image %s/%s" %
+                (i - limit + 1, DATASET_SIZE - limit + 1))
         yield str(i)
 
 
@@ -250,44 +251,51 @@ def histograms(color_space):
     Construit les 2 histogrammes peau, non peau pour
     l'espace de couleur donnée
     """
-    # Construit une liste de tout les pixels de peau
-    # et de non peau à partir des résultats du datases
-    pixels_skin = []
-    pixels_not_skin = []
-
-    for name in train_dataset():
-        img_real = Image(name).switch_color_space(color_space)
-        img_truth = Image(name, "truth")
-        for pixel_real, pixel_truth in zip(img_real.pixels(), img_truth.pixels()):
-            if np.array_equal(pixel_truth, Pixel.WHITE):
-                pixels_skin.append(pixel_real)
-            else:
-                pixels_not_skin.append(pixel_real)
-
-    # We need floats for HSV space
-    pixels_skin = np.array([pixels_skin], dtype=np.float32)
-    pixels_not_skin = np.array([pixels_not_skin], dtype=np.float32)
+    hist_skin = np.zeros((32, 32))
+    hist_not_skin = np.zeros((32, 32))
 
     # Paramètres des histogrammes en fonction du l'espace de couleur
     if color_space == "RGB":
         channels = [0, 1]  # R et G
-        ranges = [0, 256, 0, 256]  # R et G de 0 à 256
-
     elif color_space == "HSV":
         channels = [0, 1]  # H et S
-        ranges = [0, 360, 0, 1]  # H de 0 à 360, S de 0 à 1
-
     elif color_space == "LAB":
         channels = [1, 2]  # a et b
-        ranges = [-128, 127, -128, 127]  # a et b de -128 à 127
 
+    # quelque soit l'espace de couleur, opencv ramene toujours les
+    # valeurs dans les pixels entre 0 et 255 (images 8bits)
+    ranges = [0, 256, 0, 256]
     hist_size = [32, 32]  # réduction de la quantification
-    hist_skin = cv2.calcHist([pixels_skin], channels, None, hist_size, ranges)
-    hist_not_skin = cv2.calcHist([pixels_not_skin], channels, None, hist_size, ranges)
+
+    for name in train_dataset():
+
+        # On calcule les histogrammes image par image
+        # en utilisant la truth (et son inverse) comme masque
+        real = Image(name).switch_color_space(color_space)
+        img = real.img.astype(np.float32)
+        truth = Image(name, "truth")
+
+        # construit le masque
+        mask_skin = np.zeros(real.size, dtype=np.uint8)
+        for i, j, pixel in truth.pixels(with_coords=True):
+            if np.array_equal(pixel, Pixel.WHITE):
+                mask_skin[i][j] = 1
+        mask_not_skin = (1 - mask_skin)
+
+        hist_skin += cv2.calcHist(
+            [img], channels, mask_skin, hist_size, ranges)
+        hist_not_skin += cv2.calcHist(
+            [img], channels, mask_not_skin, hist_size, ranges)
 
     if DEBUG:
-        print_histogram(hist_skin)
-        print_histogram(hist_not_skin)
+        print("Histogram %s done" % color_space)
+        # print_histogram(hist_skin)
+        # print_histogram(hist_not_skin)
+
+    # Normalise les histogrammes
+    hist_skin = hist_skin / np.sum(hist_skin)
+    hist_not_skin = hist_not_skin / np.sum(hist_not_skin)
+
     return hist_skin, hist_not_skin
 
 
@@ -309,8 +317,8 @@ class BasicHistogramDetector(AbstractSkinDetector):
     Detecteur de peau basé sur les histogrammes
 
     Premiere approche "basique". Pour une couleur (a, b)
-        p(peau|c) = p(c|peau) = HistoPeau(a, b)
-        p(!peau|c) = p(c|!peau) = HistoNonPeau(a, b)
+        - p(peau|c)  = p(c|peau)  = HistoPeau(a, b)
+        - p(!peau|c) = p(c|!peau) = HistoNonPeau(a, b)
     La plus grande proba donne la classification
 
     Supporte les espaces de couleurs "RGB", "HSV", "LAB"
@@ -319,6 +327,7 @@ class BasicHistogramDetector(AbstractSkinDetector):
 
     def __init__(self, img_name, color_space):
         self.color_space = color_space
+        self.METHOD_NAME = "histogram_%s" % color_space
         self.set_histogram()
         super(BasicHistogramDetector, self).__init__(img_name)
         self.original.switch_color_space(color_space)
@@ -344,12 +353,16 @@ class BasicHistogramDetector(AbstractSkinDetector):
         Calcule proba d'etre peau ou pas à partir des
         histogrammes et retourne True si peau et False sinon
         """
-        p_skin = self.hist_skin(a, b)
-        p_not_skin = self.hist_not_skin(a, b)
+        # Reduction de la quantification
+        # On ramene a et b entre 0 et 32
+        a = int(a * 31. / 255.)
+        b = int(b * 31. / 255.)
+        p_skin = self.hist_skin[a][b]
+        p_not_skin = self.hist_not_skin[a][b]
         return bool(p_skin > p_not_skin)
 
     def process(self):
-        for i, j, pixel in self.result.pixels(with_coords=True):
+        for i, j, pixel in self.original.pixels(with_coords=True):
             # Deux premières coords du pixel utilisé en RGB et HSV
             # Deux dernières pour LAB
             if self.color_space in ["RGB", "HSV"]:
@@ -380,13 +393,12 @@ def benchmark():
         "Histogramme basique (RGB)": (BasicHistogramDetector, "RGB"),
         "Histogramme basique (LAB)": (BasicHistogramDetector, "LAB"),
         "Histogramme basique (HSV)": (BasicHistogramDetector, "HSV"),
-
     }
-
     results = {}
 
     # Pour chaque méthode, on teste le detecteur sur tout le dataset de test
-    # On calcule les taux de bonne et mauvaise detection moyens et leurs écart-types
+    # On calcule les taux de bonne et mauvaise detection moyens et leurs
+    # écart-types
     for name, data in METHODS.items():
         if DEBUG:
             print("Benchmark started for %s" % name)
@@ -396,13 +408,14 @@ def benchmark():
         false_positive_rates = []
 
         for image_name in test_dataset():
-            detector = Detector(image_name, extra_arg) if extra_arg else Detector(image_name)
+            detector = Detector(
+                image_name, extra_arg) if extra_arg else Detector(image_name)
             true_positive_rate, false_positive_rate = detector.rates()
             true_positive_rates.append(true_positive_rate)
             false_positive_rates.append(false_positive_rate)
 
         # tp: true positive / fp: false positive
-        # avg: average     / std: ecart type
+        # avg: moyenne     / std: ecart type
         tp_avg = np.mean(true_positive_rates)
         tp_std = np.std(true_positive_rates)
         fp_avg = np.mean(false_positive_rates)
@@ -413,15 +426,13 @@ def benchmark():
         if DEBUG:
             print("Benchmark done for %s" % name)
 
-        # Affichage des résultats
-        for name, result in results.items():
-            tp_avg, tp_std, fp_avg, fp_std = result
-            print("[%s] Taux bonne detection: %2f (écart-type: %2f)" % (name, tp_avg, tp_std))
-            print("[%s] Taux mauvaise detection: %2f (écart-type: %2f)" % (name, fp_avg, fp_std))
+    # Affichage des résultats
+    for name, result in results.items():
+        tp_avg, tp_std, fp_avg, fp_std = result
+        print("[%s] Taux bonne detection: %2f (écart-type: %2f)" %
+              (name, tp_avg, tp_std))
+        print("[%s] Taux mauvaise detection: %2f (écart-type: %2f)" %
+              (name, fp_avg, fp_std))
 
 if __name__ == "__main__":
     benchmark()
-    # Taux bonne detection: 0.911231 (écart-type: 0.089854)
-    # Taux mauvaise detection: 0.158280 (écart-type: 0.158280)
-    # Exemple d'image ou ca marche mal: 6, 16, 29
-    #                             bien: 59, 76, 78
