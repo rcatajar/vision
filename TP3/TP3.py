@@ -1,15 +1,21 @@
+# coding=utf-8
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 filename1 = 'points/bikes/img_7073.ppm'
 filename2 = 'points/bikes/img_7075.ppm'
 filename3 = 'points/bikes/img_7077.ppm'
+graf1 = 'points/graffiti/img1.ppm'
+graf2 = 'points/graffiti/img2.ppm'
+boat1 = 'points/boat/img0.pgm'
+boat2 = 'points/boat/img1.pgm'
+michelangelo_origin = 'points/dataset_MorelYu09/Absolute_Tilt_Tests/painting_zoom_x10/adam_zoom10_front.pgm'
+michelangelo_tilt = 'points/dataset_MorelYu09/Absolute_Tilt_Tests/painting_zoom_x10/adam_zoom10_45degR.pgm'
 
 
+# Question 1.1
 def corner_harris(source):
-
     img = cv2.imread(source)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -21,14 +27,32 @@ def corner_harris(source):
     img[dst > 0.01 * dst.max()] = [0, 0, 255]
 
     cv2.imshow('dst', img)
-    plt.show()
+    # plt.show()
+    if cv2.waitKey(0) & 0xff == 27:
+        cv2.destroyAllWindows()
 
     return dst
 
 
+# Question 1.1
+def corner_sift(source):
+    img = cv2.imread(source)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    sift = cv2.SIFT()
+    kp = sift.detect(gray, None)
+
+    img = cv2.drawKeypoints(gray, kp)
+
+    plt.imshow(img)
+    plt.show()
+
+    return kp
+
+
+# Question 1.1 (celui qu'on utilise effectivement dans la suite)
 def corner_shi_tomasi(source):
     """
-
     :param source: le chemin de l'image
     :return: la liste des points selon la methode de shi_thomasi
     """
@@ -46,21 +70,7 @@ def corner_shi_tomasi(source):
     return corners
 
 
-def corner_sift(source):
-    img = cv2.imread(source)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    sift = cv2.SIFT()
-    kp = sift.detect(gray, None)
-
-    img = cv2.drawKeypoints(gray, kp)
-
-    plt.imshow(img)
-    plt.show()
-
-    return kp
-
-
+# Question 1.2
 def calcul_similarite(source1, source2):
     """
 
@@ -116,6 +126,7 @@ def calcul_similarite(source1, source2):
                              image_1_bot_right, image_2_top_left, image_2_bot_right)
 
 
+# Question 1.2
 def plot_windows(source1, source2, image_1_top_left, image_1_bot_right, image_2_top_left, image_2_bot_right):
     """
 
@@ -144,13 +155,14 @@ def plot_windows(source1, source2, image_1_top_left, image_1_bot_right, image_2_
     plt.show()
 
 
+# Question 1.2
 def cost(window1, window2, type="SSD"):
     """
 
     :param window1: la fenetre de l'image de gauche
     :param window2: la fenetre de l'image de droite
     :param type: le type de cout que l'on souhaite utiliser ici. Seulement SSD et SAD sont implementes
-    :return:
+    :return: resultat de la fonction de dissimilarite
     """
 
     if not len(window1) == len(window2) and len(window1[0]) == len(window2[0]):
@@ -162,7 +174,7 @@ def cost(window1, window2, type="SSD"):
     for j in range(len(window1)):
         for i in range(len(window1[0])):
             if type == "SSD":
-                sum += (window1[j][i] - window2[j][i])**2
+                sum += (window1[j][i] - window2[j][i]) ** 2
             elif type == "SAD":
                 sum += abs(window1[j][i] - window2[j][i])
             else:
@@ -172,6 +184,7 @@ def cost(window1, window2, type="SSD"):
     return sum
 
 
+# Question 1.2
 def window_around(img, corners, n, p):
     """
         Cette fonction prend en argument    img = l'image initiale
@@ -188,24 +201,91 @@ def window_around(img, corners, n, p):
         x = corner[0][0]
         y = corner[0][1]
 
+        # On verifie qu'on ne sort pas de l'image
         if x > n and y > p and x + n < size_x and y + p < size_y:
             window = []
 
             for j in range(-p, p + 1):
                 window.append([img[j][x - i] for i in range(-n, n + 1)])
 
-            #list_of_windows.append([window, (y-p, x-n), (y+p+1, x+n+1)])
+            # list_of_windows.append([window, (y-p, x-n), (y+p+1, x+n+1)])
             list_of_windows.append(
                 [window, (x - n, y - p), (x + n + 1, y + p + 1)])
 
     return list_of_windows
 
-#calcul_similarite(filename1, filename2)
-#calcul_similarite(filename1, filename2)
+
+# Question 1.3
+def bfmatcher(source1, source2):
+    img1 = cv2.imread(source1, 0)  # queryImage
+    img2 = cv2.imread(source2, 0)  # trainImage
+
+    # Initiate SIFT detector
+    orb = cv2.ORB_create()
+
+    # find the keypoints and descriptors with SIFT
+    kp1, des1 = orb.detectAndCompute(img1, None)
+    kp2, des2 = orb.detectAndCompute(img2, None)
+
+    # create BFMatcher object
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+
+    # Match descriptors.
+    matches = bf.match(des1, des2)
+
+    # Sort them in the order of their distance.
+    matches = sorted(matches, key=lambda x: x.distance)
+
+    # Draw first 10 matches.
+    img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches[:10], None, flags=2)
+
+    plt.imshow(img3), plt.show()
 
 
+# Question 1.3
+def flannmatcher(source1, source2):
+    # FIXME: soucis sur Ubuntu, OpenCV 3.1.0. Il semblerait que ce soit un bug
+    # https://github.com/Itseez/opencv/issues/5667
+
+    img1 = cv2.imread(source1, 0)  # queryImage
+    img2 = cv2.imread(source2, 0)  # trainImage
+
+    # Initiate SIFT detector
+    sift = cv2.xfeatures2d.SIFT_create()
+
+    # find the keypoints and descriptors with SIFT
+    kp1, des1 = sift.detectAndCompute(img1, None)
+    kp2, des2 = sift.detectAndCompute(img2, None)
+
+    # FLANN parameters
+    FLANN_INDEX_KDTREE = 0
+    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+    search_params = dict(checks=50)  # or pass empty dictionary
+
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+
+    matches = flann.knnMatch(des1, des2, k=2)
+
+    # Need to draw only good matches, so create a mask
+    matchesMask = [[0, 0] for i in xrange(len(matches))]
+
+    # ratio test as per Lowe's paper
+    for i, (m, n) in enumerate(matches):
+        if m.distance < 0.7 * n.distance:
+            matchesMask[i] = [1, 0]
+
+    draw_params = dict(matchColor=(0, 255, 0),
+                       singlePointColor=(255, 0, 0),
+                       matchesMask=matchesMask,
+                       flags=0)
+
+    img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, matches, None, **draw_params)
+
+    plt.imshow(img3, ), plt.show()
+
+
+# Question 2
 def homemade_harris(source):
-
     img = cv2.imread(source, 0)
 
     # On effectue des transformation de Sobel pour garder les gradients selon
@@ -215,23 +295,18 @@ def homemade_harris(source):
     Ix = cv2.Sobel(img, cv2.CV_8U, 1, 0, ksize=seuil)
     Iy = cv2.Sobel(img, cv2.CV_8U, 0, 1, ksize=seuil)
 
+    # On calcule puis on lisse Ix2 , Ix2 et Ixy avec un filtre gaussien
     smoothing_factor = (5, 5)
 
-    Ix2 = cv2.blur(np.multiply(Ix, Ix), smoothing_factor)
-    Iy2 = cv2.blur(np.multiply(Iy, Iy), smoothing_factor)
-    Ixy = cv2.blur(np.multiply(Ix, Iy), smoothing_factor)
+    Ix2 = cv2.GaussianBlur(np.multiply(Ix, Ix), smoothing_factor, 0)
+    Iy2 = cv2.GaussianBlur(np.multiply(Iy, Iy), smoothing_factor, 0)
+    Ixy = cv2.GaussianBlur(np.multiply(Ix, Iy), smoothing_factor, 0)
 
     #  On utilise la formule de Harris pour obtenir une nouvelle image
-    image_harrised = []
-    for j in range(len(img)):
-        line = []
-        for i in range(len(img[0])):
-            harris = Ix2[j][i] * Iy2[j][i] - Ixy[j][i]**2 - \
-                0.04 * (Ix2[j][i] + Iy2[j][i])
-            line.append(harris)
-        image_harrised.append(line)
+    det = np.multiply(Ix2, Iy2) - np.multiply(Ixy, Ixy)
+    trace = np.add(Iy2, Ix2)
 
-    image_harrised = np.array(image_harrised)
+    image_harrised = det - 0.04 * np.array(np.multiply(trace, trace))
 
     #  Maintenant qu'on a une image de harris, on va lui faire quelques modifications
     #  On met les points sur les bords et les points d'intensite negative a 0
@@ -243,7 +318,8 @@ def homemade_harris(source):
         line = []
         for i in range(len(image_harrised[0])):
             #  Si on est sur un bord, on met la valeur 0
-            if image_harrised[j][i] < 0 or i <= 1 or j <= 1 or i >= len(image_harrised[0]) - 1 or j >= len(image_harrised) - 1:
+            if image_harrised[j][i] < 0 or i <= 1 or j <= 1 or i >= len(image_harrised[0]) - 1 or j >= len(
+                    image_harrised) - 1:
                 line.append(0)
             else:
                 # Sinon, on calcule si la valeur actuelle est plus elevee que
@@ -302,5 +378,14 @@ def tri_insertion(liste, (intensite, x, y)):
 
         return liste + [(intensite, x, y)]
 
-calcul_similarite(filename1, filename2)
-homemade_harris(filename2)
+
+# calcul_similarite(michelangelo_origin, michelangelo_tilt)
+# calcul_similarite(filename2, filename1)
+# homemade_harris(filename2)
+
+# corner_harris(filename1)
+
+# corner_shi_tomasi(filename4)
+
+bfmatcher(michelangelo_origin, michelangelo_tilt)
+# flannmatcher(michelangelo_origin, michelangelo_tilt)

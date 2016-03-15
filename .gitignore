@@ -60,3 +60,9 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+# Pictures
+points/
+
+# Pycharm
+.idea/
