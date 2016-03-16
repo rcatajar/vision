@@ -39,10 +39,10 @@ def corner_sift(source):
     img = cv2.imread(source)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    sift = cv2.SIFT()
+    sift = cv2.xfeatures2d.SIFT_create()
     kp = sift.detect(gray, None)
 
-    img = cv2.drawKeypoints(gray, kp)
+    img = cv2.drawKeypoints(gray, kp, None)
 
     plt.imshow(img)
     plt.show()
@@ -95,13 +95,12 @@ def calcul_similarite(source1, source2):
         x, y = corner.ravel()
         cv2.circle(img2, (x, y), 3, 255, -1)
 
-    n = 40
-    p = 60
+    n = 30
+    p = 30
 
     #  Puis pour chaque point des listes corners, on fait une fenetre de taille (2N+1)x(2P+1)
     # On stocke ces fenetres dans deux listes contenant les intensites des
     # points de cette fenetre
-
     list_windows1 = window_around(img1, corners1, n, p)
     list_windows2 = window_around(img2, corners2, n, p)
 
@@ -123,7 +122,7 @@ def calcul_similarite(source1, source2):
                 image_2_bot_right = point22
 
                 plot_windows(source1, source2, image_1_top_left,
-                             image_1_bot_right, image_2_top_left, image_2_bot_right)
+                            image_1_bot_right, image_2_top_left, image_2_bot_right)
 
 
 # Question 1.2
@@ -188,7 +187,7 @@ def cost(window1, window2, type="SSD"):
 def window_around(img, corners, n, p):
     """
         Cette fonction prend en argument    img = l'image initiale
-                                            corners = une liste de coordonnees de points autour desquels on veut une fenetre
+                                            corners = une liste de coordonnees de points autour desquelles on veut une fenetre
                                             n = la largeur de la fenetre
                                             p = la hauteur de la fenetre
     """
@@ -205,8 +204,8 @@ def window_around(img, corners, n, p):
         if x > n and y > p and x + n < size_x and y + p < size_y:
             window = []
 
-            for j in range(-p, p + 1):
-                window.append([img[j][x - i] for i in range(-n, n + 1)])
+            for j in range(2*p + 1):
+                window.append([img[j - p][x - i - n] for i in range(2*n + 1)])
 
             # list_of_windows.append([window, (y-p, x-n), (y+p+1, x+n+1)])
             list_of_windows.append(
@@ -219,6 +218,7 @@ def window_around(img, corners, n, p):
 def bfmatcher(source1, source2):
     img1 = cv2.imread(source1, 0)  # queryImage
     img2 = cv2.imread(source2, 0)  # trainImage
+
 
     # Initiate SIFT detector
     orb = cv2.ORB_create()
@@ -246,6 +246,7 @@ def bfmatcher(source1, source2):
 def flannmatcher(source1, source2):
     # FIXME: soucis sur Ubuntu, OpenCV 3.1.0. Il semblerait que ce soit un bug
     # https://github.com/Itseez/opencv/issues/5667
+    # Update : même soucis sur Mac. C'est bien lié à OpenCV
 
     img1 = cv2.imread(source1, 0)  # queryImage
     img2 = cv2.imread(source2, 0)  # trainImage
@@ -380,12 +381,13 @@ def tri_insertion(liste, (intensite, x, y)):
 
 
 # calcul_similarite(michelangelo_origin, michelangelo_tilt)
-# calcul_similarite(filename2, filename1)
+calcul_similarite(filename2, filename1)
 # homemade_harris(filename2)
 
 # corner_harris(filename1)
 
-# corner_shi_tomasi(filename4)
+#corner_shi_tomasi(filename2)
+#corner_sift(michelangelo_origin)
 
-bfmatcher(michelangelo_origin, michelangelo_tilt)
-# flannmatcher(michelangelo_origin, michelangelo_tilt)
+#bfmatcher(michelangelo_origin, michelangelo_tilt)
+#flannmatcher(michelangelo_origin, michelangelo_tilt)
