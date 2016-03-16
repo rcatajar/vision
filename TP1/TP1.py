@@ -53,7 +53,7 @@ def test_dataset():
     for i in range(limit, DATASET_SIZE + 1):
         if DEBUG:
             print("[test] image %s/%s" %
-                (i - limit + 1, DATASET_SIZE - limit + 1))
+                  (i - limit + 1, DATASET_SIZE - limit + 1))
         yield str(i)
 
 
@@ -66,7 +66,7 @@ class Image(object):
         Args:
             - name (str): nom de l'image
             - _type (Optional[str]): type de l'image (original par defaut,
-                                     "truth" ou nom de la méthode)
+                                     "truth", ou nom de la méthode)
         """
         self.name = name
 
@@ -249,7 +249,7 @@ class PeerSkinDetector(AbstractSkinDetector):
 def histograms(color_space):
     """
     Construit les 2 histogrammes peau, non peau pour
-    l'espace de couleur donnée
+    l'espace de couleur donnée et calcule le ratio peau / pixels dans le dataset
     """
     hist_skin = np.zeros((32, 32))
     hist_not_skin = np.zeros((32, 32))
@@ -292,11 +292,14 @@ def histograms(color_space):
         # print_histogram(hist_skin)
         # print_histogram(hist_not_skin)
 
+    # Calcule ratio pixel peau / non peau
+    ratio_skin = np.sum(hist_skin) / (np.sum(hist_skin) + np.sum(hist_not_skin))
+
     # Normalise les histogrammes
     hist_skin = hist_skin / np.sum(hist_skin)
     hist_not_skin = hist_not_skin / np.sum(hist_not_skin)
 
-    return hist_skin, hist_not_skin
+    return hist_skin, hist_not_skin, ratio_skin
 
 
 def print_histogram(histogram):
@@ -307,9 +310,9 @@ def print_histogram(histogram):
     plt.show()
 
 # Build the histograms
-hist_skin_RGB, hist_not_skin_RGB = histograms("RGB")
-hist_skin_HSV, hist_not_skin_HSV = histograms("HSV")
-hist_skin_LAB, hist_not_skin_LAB = histograms("LAB")
+hist_skin_RGB, hist_not_skin_RGB, ratio_skin_RGB = histograms("RGB")
+hist_skin_HSV, hist_not_skin_HSV, ratio_skin_HSV = histograms("HSV")
+hist_skin_LAB, hist_not_skin_LAB, ratio_skin_LAB = histograms("LAB")
 
 
 class BasicHistogramDetector(AbstractSkinDetector):
@@ -327,10 +330,12 @@ class BasicHistogramDetector(AbstractSkinDetector):
 
     def __init__(self, img_name, color_space):
         self.color_space = color_space
-        self.METHOD_NAME = "histogram_%s" % color_space
         self.set_histogram()
+        self.set_name()
         super(BasicHistogramDetector, self).__init__(img_name)
-        self.original.switch_color_space(color_space)
+
+        def set_name(self):
+            self.METHOD_NAME = "histogram_%s" % self.color_space
 
     def set_histogram(self):
         """
@@ -339,14 +344,17 @@ class BasicHistogramDetector(AbstractSkinDetector):
         if self.color_space == "RGB":
             self.hist_skin = hist_skin_RGB
             self.hist_not_skin = hist_not_skin_RGB
+            self.ratio_skin = ratio_skin_RGB
 
         elif self.color_space == "HSV":
             self.hist_skin = hist_skin_HSV
             self.hist_not_skin = hist_not_skin_HSV
+            self.ratio_skin = ratio_skin_HSV
 
         elif self.color_space == "LAB":
             self.hist_skin = hist_skin_LAB
             self.hist_not_skin = hist_not_skin_LAB
+            self.ratio_skin = ratio_skin_LAB
 
     def is_skin(self, a, b):
         """
@@ -362,6 +370,7 @@ class BasicHistogramDetector(AbstractSkinDetector):
         return bool(p_skin > p_not_skin)
 
     def process(self):
+        self.original = self.original.switch_color_space(self.color_space)
         for i, j, pixel in self.original.pixels(with_coords=True):
             # Deux premières coords du pixel utilisé en RGB et HSV
             # Deux dernières pour LAB
@@ -376,23 +385,111 @@ class BasicHistogramDetector(AbstractSkinDetector):
         self.result.save()
 
 
-# Detecter avec ces histogrammes
-#   - methode de Bayes (tester differentes valeurs de seuil)
+class BayesHistogramDetector(BasicHistogramDetector):
+    """
+    Utilise la formule de Bayes pour detecter les pixels de peau
+    """
 
-# Detecter avec Viola Jones
+    def __init__(self, img_name, color_space, seuil):
+        """
+        Même paremetre qu'avec la formule "basique" avec le seuil en plus
+        """
+        self.seuil = seuil
+        super(BayesHistogramDetector, self).__init__(img_name, color_space)
+
+    def set_name(self):
+        self.METHOD_NAME = "bayes_%s" % self.color_space
+
+    def is_skin(self, a, b):
+        """
+        Calcule proba d'etre peau ou pas à partir des
+        histogrammes et retourne True si peau et False sinon
+        """
+        # Reduction de la quantification
+        # On ramene a et b entre 0 et 32
+        a = int(a * 31. / 255.)
+        b = int(b * 31. / 255.)
+        p_skin = self.hist_skin[a][b]
+        p_not_skin = self.hist_not_skin[a][b]
+        ratio_skin = self.ratio_skin
+        ratio_not_skin = 1 - self.ratio_skin
+
+        p = p_skin * ratio_skin / (p_skin * ratio_skin + p_not_skin * ratio_not_skin)
+        return bool(p > self.seuil)
+
+
+# Optimisation du seuil
+def find_best_seuil(color_space):
+    """
+    Benchmark la détection via méthode de Bayes avec différentes valeurs de seuil et
+    retourne le meilleur seuil
+    """
+    best_seuil = 0
+    best_score = 0
+    # Pour chercher le meilleur score on va chercher a maximiser le taux de bonne detection
+    # sur les données d'entrainement
+    # Et minimiser celui de mauvaise detection. Pour cela, on cherche à maximiser leur différence
+    for seuil in np.arange(0, 1, 0.1):  # test de 0 à 0.9
+        tp_avg, tp_std, fp_avg, fp_std = benchmark(
+            BayesHistogramDetector, [color_space, seuil], False)
+        score = tp_avg - fp_avg
+        if DEBUG:
+            print("Seuil: %2f, Bonne detection: %2f, Mauvaise detection: %2f" %
+                  (seuil, tp_avg, fp_avg))
+        if score > best_score:
+            best_score = score
+            best_seuil = seuil
+    if DEBUG:
+        print("Meilleur seuil pour %s: %s" % (color_space, best_seuil))
+    return best_seuil
+
+
+def benchmark(Detector, extra_args, use_test_data=True):
+    """
+    Run un benchmark du detecteur passé en arg
+    """
+    if DEBUG:
+        print("Benchmark started for %s(%s)" % (Detector.__name__, extra_args))
+
+    true_positive_rates = []
+    false_positive_rates = []
+
+    for image_name in (test_dataset() if use_test_data else train_dataset()):
+        detector = Detector(image_name, *extra_args) if extra_args else Detector(image_name)
+        true_positive_rate, false_positive_rate = detector.rates()
+        true_positive_rates.append(true_positive_rate)
+        false_positive_rates.append(false_positive_rate)
+
+    # tp: true positive / fp: false positive
+    # avg: moyenne     / std: ecart type
+    tp_avg = np.mean(true_positive_rates)
+    tp_std = np.std(true_positive_rates)
+    fp_avg = np.mean(false_positive_rates)
+    fp_std = np.mean(false_positive_rates)
+    return tp_avg, tp_std, fp_avg, fp_std
 
 
 # Benchmark
-def benchmark():
+def full_benchmark(use_test_data=True):
     """
-    Benchmark les différentes méthodes sur le dataset de test
+    Benchmark les différentes méthodes sur le dataset de test par default
+    (si use_test_data = False, benchmark sur les données d'entrainement)
     """
+
+    # seuils pour la méthode de Bayes
+    # On determine le seuil qui maximise les résultats sur les données d'entrainement
+    seuil_RGB = find_best_seuil("RGB")
+    seuil_LAB = find_best_seuil("LAB")
+    seuil_HSV = find_best_seuil("HSV")
 
     METHODS = {
         "Peer et Al": (PeerSkinDetector, None),
-        "Histogramme basique (RGB)": (BasicHistogramDetector, "RGB"),
-        "Histogramme basique (LAB)": (BasicHistogramDetector, "LAB"),
-        "Histogramme basique (HSV)": (BasicHistogramDetector, "HSV"),
+        "Histogramme basique (RGB)": (BasicHistogramDetector, ["RGB"]),
+        "Histogramme basique (LAB)": (BasicHistogramDetector, ["LAB"]),
+        "Histogramme basique (HSV)": (BasicHistogramDetector, ["HSV"]),
+        "Methode de Bayes (RGB, seuil = %s)" % seuil_RGB: (BayesHistogramDetector, ["RGB", seuil_RGB]),
+        "Methode de Bayes (LAB, seuil = %s)" % seuil_LAB: (BayesHistogramDetector, ["LAB", seuil_LAB]),
+        "Methode de Bayes (HSV, seuil = %s)" % seuil_HSV: (BayesHistogramDetector, ["HSV", seuil_HSV]),
     }
     results = {}
 
@@ -400,31 +497,8 @@ def benchmark():
     # On calcule les taux de bonne et mauvaise detection moyens et leurs
     # écart-types
     for name, data in METHODS.items():
-        if DEBUG:
-            print("Benchmark started for %s" % name)
-        Detector, extra_arg = data
-
-        true_positive_rates = []
-        false_positive_rates = []
-
-        for image_name in test_dataset():
-            detector = Detector(
-                image_name, extra_arg) if extra_arg else Detector(image_name)
-            true_positive_rate, false_positive_rate = detector.rates()
-            true_positive_rates.append(true_positive_rate)
-            false_positive_rates.append(false_positive_rate)
-
-        # tp: true positive / fp: false positive
-        # avg: moyenne     / std: ecart type
-        tp_avg = np.mean(true_positive_rates)
-        tp_std = np.std(true_positive_rates)
-        fp_avg = np.mean(false_positive_rates)
-        fp_std = np.mean(false_positive_rates)
-
-        results[name] = (tp_avg, tp_std, fp_avg, fp_std)
-
-        if DEBUG:
-            print("Benchmark done for %s" % name)
+        Detector, extra_args = data
+        results[name] = benchmark(Detector, extra_args, use_test_data)
 
     # Affichage des résultats
     for name, result in results.items():
@@ -434,5 +508,14 @@ def benchmark():
         print("[%s] Taux mauvaise detection: %2f (écart-type: %2f)" %
               (name, fp_avg, fp_std))
 
+    return results
+
 if __name__ == "__main__":
-    benchmark()
+    # Benchmark sur les données d'entrainement
+    full_benchmark(use_test_data=False)
+    # Benchmark sur les données de tests
+    full_benchmark(use_test_data=True)
+
+
+# TODO:
+# Dernier modèle (classifieur Viola Jones)
