@@ -52,25 +52,139 @@ Cette approche me semble être limité. En effet, même si on imagine pouvoir d�
 J'ai construit une base de 78 images a partir du dataset \emph{Pratheepan Dataset}. Ces images sont ensuite séparées en deux groupe, un groupe "d'entrainement" de 52 images et un groupe de test de 26 images.
 
 \subsubsection{Une première méthode simple}
-Les résultats obtenues sont présenté dans le tableau ci dessous. Globalement le taux de bonne détection est acceptable, mais celui de mauvaise détection est trop élevée. Peut être que cette règle est trop permissive.
+Les résultats obtenues sont présenté dans le tableau ci dessous.
 
-TODO: Ajouter tableau, Ajouter exemples
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.87 & 0.14 & 0.28 & 0.20 \\ \hline
+\textit{Test} & 0.91 & 0.09 & 0.16 & 0.15 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats de la méthode de Peer et Al.}
+\label{peer-et-al}
+\end{table}
+
+
+ Globalement le taux de bonne détection est acceptable, mais celui de mauvaise détection est trop élevée (son ecart type egalement, ce qui indique l'existence d'image ou le taux de mauvaise detection est > 50\%). La règle semble être trop permissive.
+
+TODO: montrer des exemples
 
 \subsubsection{Approche non paramétrique: Histogramme et modèle de peau}
-J'ai construit les histogramme a partir du dataset d'entrainement pour les espaces RGB, LAB et HSV. 
 
-TODO: Ajouter tableau, Ajouter exemples
+TODO: Montrer les histogrammes
+
+J'ai construit les histogramme a partir du dataset d'entrainement pour les espaces RGB, LAB et HSV. Les résultats sont présentés ci dessous.
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.85 & 0.19 & 0.19 & 0.15 \\ \hline
+\textit{Test} & 0.86 & 0.20 & 0.13 & 0.14 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec les histogrammes RGB}
+\label{histo-rgb}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.73 & 0.27 & 0.11 & 0.11 \\ \hline
+\textit{Test} & 0.73 & 0.28 & 0.08 & 0.10 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec les histogrammes LAB}
+\label{histo-lab}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.86 & 0.17 & 0.25 & 0.11 \\ \hline
+\textit{Test} & 0.89 & 0.15 & 0.21 & 0.15 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec les histogrammes HSV}
+\label{histo-lab}
+\end{table}
+
+TODO: Commentaires et exemples
 
 \subsubsection{Méthode de Bayes}
-J'utilise les histogrammes de la partie précédente pour mon modèle de Bayes. Pour déterminer le meilleur seuil, je cherche a maximiser le taux de bonne detection tout en minimisant celui de mauvaise detection. Pour cela, j'ai fait le choix de tester différentes valeurs de seuil en cherchant a maximiser leur différence. J'obtient les valeurs de seuil suivante:
+J'utilise les histogrammes de la partie précédente pour mon modèle de Bayes. Pour déterminer le meilleur seuil, je cherche a maximiser le taux de bonne détection tout en minimisant celui de mauvaise détection. Pour cela, j'ai fait le choix de tester différentes valeurs de seuil en cherchant a maximiser leur différence. J'obtiens les valeurs de seuil suivante:
 \begin{itemize}
     \item \textit{RGB}: $0.2$
     \item \textit{LAB}: $0.15$
     \item \textit{HSV}: $0.15$
 \end{itemize}
 Des seuils plus faibles permettent d'augmenter le taux de bonne détection, mais rapidement le taux de mauvaise détection grimpe au dessus des 20\%
+Les résultats présentés ci dessous sont basés sur ces seuils.
 
-TODO: Tableau résultats, exemples
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.82 & 0.20 & 0.16 & 0.12 \\ \hline
+\textit{Test} & 0.82 & 0.21 & 0.12 & 0.13 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec la méthode de Bayes (RGB, seuil 0.2)}
+\label{bayes-rgb}
+\end{table}
+
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.74 & 0.26 & 0.12 & 0.11 \\ \hline
+\textit{Test} & 0.73 & 0.28 & 0.08 & 0.10 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec la méthode de Bayes (LAB, seuil 0.15)}
+\label{bayes-lab}
+\end{table}
+
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.88 & 0.15 & 0.26 & 0.21 \\ \hline
+\textit{Test} & 0.91 & 0.11 & 0.22 & 0.16 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec la méthode de Bayes (HSV, seuil 0.15)}
+\label{bayes-hsv}
+\end{table}
+
+TODO: Commentaires et exemples
 
 \subsubsection{Évaluation}
 
@@ -85,7 +199,8 @@ TODO: proposer une ou deux ameliorations
 TODO: Code, exemples, resultats
 
 \subsection{Discussion: pour aller plus loin!}
-TODO: pipo (methodes de deep learning)
+TODO: pipo (méthodes de deep learning)
 
-\section{Detection de visages par des algorithmes de segmentation}
+\section{Détection de visages par des algorithmes de segmentation}
 \end{document}
+TODO: optionnel
