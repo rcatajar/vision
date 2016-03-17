@@ -294,6 +294,7 @@ def histograms(color_space):
 
     # Calcule ratio pixel peau / non peau
     ratio_skin = np.sum(hist_skin) / (np.sum(hist_skin) + np.sum(hist_not_skin))
+    print ratio_skin
 
     # Normalise les histogrammes
     hist_skin = hist_skin / np.sum(hist_skin)
@@ -414,7 +415,7 @@ class BayesHistogramDetector(BasicHistogramDetector):
         ratio_skin = self.ratio_skin
         ratio_not_skin = 1 - self.ratio_skin
 
-        p = p_skin * ratio_skin / (p_skin * ratio_skin + p_not_skin * ratio_not_skin)
+        p = (p_skin * ratio_skin) / (p_skin * ratio_skin + p_not_skin * ratio_not_skin)
         return bool(p > self.seuil)
 
 
@@ -427,9 +428,9 @@ def find_best_seuil(color_space):
     best_seuil = 0
     best_score = 0
     # Pour chercher le meilleur score on va chercher a maximiser le taux de bonne detection
-    # sur les données d'entrainement
-    # Et minimiser celui de mauvaise detection. Pour cela, on cherche à maximiser leur différence
-    for seuil in np.arange(0, 1, 0.1):  # test de 0 à 0.9
+    # et minimiser celui de mauvaise Detection sur les données d'entrainement.
+    # Pour cela, on cherche à maximiser leur différence
+    for seuil in np.arange(0.1, 1, 0.1):  # test de 0.1 à 0.9
         tp_avg, tp_std, fp_avg, fp_std = benchmark(
             BayesHistogramDetector, [color_space, seuil], False)
         score = tp_avg - fp_avg
@@ -439,8 +440,7 @@ def find_best_seuil(color_space):
         if score > best_score:
             best_score = score
             best_seuil = seuil
-    if DEBUG:
-        print("Meilleur seuil pour %s: %s" % (color_space, best_seuil))
+    print("Meilleur seuil pour %s: %s" % (color_space, best_seuil))
     return best_seuil
 
 
@@ -448,8 +448,7 @@ def benchmark(Detector, extra_args, use_test_data=True):
     """
     Run un benchmark du detecteur passé en arg
     """
-    if DEBUG:
-        print("Benchmark started for %s(%s)" % (Detector.__name__, extra_args))
+    print("Benchmark started for %s(%s)" % (Detector.__name__, extra_args))
 
     true_positive_rates = []
     false_positive_rates = []
@@ -466,6 +465,9 @@ def benchmark(Detector, extra_args, use_test_data=True):
     tp_std = np.std(true_positive_rates)
     fp_avg = np.mean(false_positive_rates)
     fp_std = np.mean(false_positive_rates)
+
+    print("Benchmark finished for %s(%s)" % (Detector.__name__, extra_args))
+
     return tp_avg, tp_std, fp_avg, fp_std
 
 
@@ -475,6 +477,7 @@ def full_benchmark(use_test_data=True):
     Benchmark les différentes méthodes sur le dataset de test par default
     (si use_test_data = False, benchmark sur les données d'entrainement)
     """
+    dataset_name = "test" if use_test_data else "training"
 
     # seuils pour la méthode de Bayes
     # On determine le seuil qui maximise les résultats sur les données d'entrainement
@@ -503,10 +506,10 @@ def full_benchmark(use_test_data=True):
     # Affichage des résultats
     for name, result in results.items():
         tp_avg, tp_std, fp_avg, fp_std = result
-        print("[%s] Taux bonne detection: %2f (écart-type: %2f)" %
-              (name, tp_avg, tp_std))
-        print("[%s] Taux mauvaise detection: %2f (écart-type: %2f)" %
-              (name, fp_avg, fp_std))
+        print("[%s] Taux bonne detection sur le dataset de %s: %2f (écart-type: %2f)" %
+              (name, dataset_name, tp_avg, tp_std))
+        print("[%s] Taux mauvaise detection sur le dataset de %s: %2f (écart-type: %2f)" %
+              (name, dataset_name, fp_avg, fp_std))
 
     return results
 
