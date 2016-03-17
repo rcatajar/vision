@@ -79,7 +79,7 @@ def calcul_similarite(source1, source2):
     :return: la fenetre de plus grande similarite entre les deux images
     """
 
-    # Dans un premier temps on recupere la liste de tous les points
+    # Dans un premier temps on récupère la liste de tous les points
     # d'importance des images 1 et 2
 
     corners1 = corner_shi_tomasi(source1)
@@ -95,25 +95,25 @@ def calcul_similarite(source1, source2):
         x, y = corner.ravel()
         cv2.circle(img2, (x, y), 3, 255, -1)
 
-    n = 30
-    p = 30
+    n = 10
+    p = 15
 
-    #  Puis pour chaque point des listes corners, on fait une fenetre de taille (2N+1)x(2P+1)
-    # On stocke ces fenetres dans deux listes contenant les intensites des
-    # points de cette fenetre
+    # Puis pour chaque point des listes corners, on fait une fenêtre de taille (2N+1)x(2P+1)
+    # On stocke ces fenêtres dans deux listes contenant les intensités des
+    # points de cette fenêtre
     list_windows1 = window_around(img1, corners1, n, p)
     list_windows2 = window_around(img2, corners2, n, p)
 
-    # On initialise le maximum avec une valeur tres elevee afin d'etre sur
-    # d'obtenir un minima par la suite
+    # On initialise le maximum avec une valeur très élevée afin d'être sûr
+    # d'obtenir un minimum par la suite
     max_similarity = 10000000000
 
-    #  On va ensuite calculer la similarite de chaque combinaison possible de fenetre de corner dans les deux images
-    # On ne gardera que les points extremes de chaque fenetre minimisant la
-    # dissimilarite
+    # On va ensuite calculer la similarité de chaque combinaison possible de fenêtre de corner dans les deux images
+    # On ne gardera que les points extrêmes de chaque fenêtre minimisant la
+    # dissimilarité
     for window1, point11, point12 in list_windows1:
         for window2, point21, point22 in list_windows2:
-            similarity = cost(window1, window2, "SAD")
+            similarity = cost(window1, window2, "SSD")
             if similarity < max_similarity:
                 max_similarity = similarity
                 image_1_top_left = point11
@@ -136,7 +136,7 @@ def plot_windows(source1, source2, image_1_top_left, image_1_bot_right, image_2_
     :return:
     """
 
-    #  On dessine des rectanges pour montrer la location de ces fenetres
+    #  On dessine des rectanges pour montrer la localistaion de ces fenêtres
 
     img1 = cv2.imread(source1, 0)
     img2 = cv2.imread(source2, 0)
@@ -202,14 +202,10 @@ def window_around(img, corners, n, p):
 
         # On verifie qu'on ne sort pas de l'image
         if x > n and y > p and x + n < size_x and y + p < size_y:
-            window = []
+            window = img[y - p:y + p + 1, x - n:x + n + 1]
 
-            for j in range(2*p + 1):
-                window.append([img[j - p][x - i - n] for i in range(2*n + 1)])
-
-            # list_of_windows.append([window, (y-p, x-n), (y+p+1, x+n+1)])
             list_of_windows.append(
-                [window, (x - n, y - p), (x + n + 1, y + p + 1)])
+                [window, (x - n, y - p), (x + n, y + p)])
 
     return list_of_windows
 
@@ -285,109 +281,153 @@ def flannmatcher(source1, source2):
     plt.imshow(img3, ), plt.show()
 
 
-# Question 2
-def homemade_harris(source):
-    img = cv2.imread(source, 0)
+class HomemadeHarris:
+    """
+    Question 2
+    """
 
-    # On effectue des transformation de Sobel pour garder les gradients selon
-    # x et y
+    def __init__(self, source, seuil_sobel=5, smoothing_factor=(5, 5)):
+        self.source = source
+        self.img = cv2.imread(source, 0)
 
-    seuil = 5
-    Ix = cv2.Sobel(img, cv2.CV_8U, 1, 0, ksize=seuil)
-    Iy = cv2.Sobel(img, cv2.CV_8U, 0, 1, ksize=seuil)
+        self.Ix, self.Iy = self.sobel_transformation(seuil_sobel)
+        self.Ixy, self.Ix2, self.Iy2 = self.gaussian_blur(smoothing_factor)
 
-    # On calcule puis on lisse Ix2 , Ix2 et Ixy avec un filtre gaussien
-    smoothing_factor = (5, 5)
+        self.img_harris = self.harris_function()
 
-    Ix2 = cv2.GaussianBlur(np.multiply(Ix, Ix), smoothing_factor, 0)
-    Iy2 = cv2.GaussianBlur(np.multiply(Iy, Iy), smoothing_factor, 0)
-    Ixy = cv2.GaussianBlur(np.multiply(Ix, Iy), smoothing_factor, 0)
+    def sobel_transformation(self, seuil):
+        """
+        On effectue des transformation de Sobel pour garder les gradients selon
+        x et y
+        Parameters
+        ----------
+        seuil : taille du noyau de Sobel; doit être 1, 3, 5 ou 7.
 
-    #  On utilise la formule de Harris pour obtenir une nouvelle image
-    det = np.multiply(Ix2, Iy2) - np.multiply(Ixy, Ixy)
-    trace = np.add(Iy2, Ix2)
+        Returns
+        -------
+        Ix, Iy : gradients en x et y de l'image
+        """
+        Ix = cv2.Sobel(self.img, cv2.CV_8U, 1, 0, ksize=seuil)
+        Iy = cv2.Sobel(self.img, cv2.CV_8U, 0, 1, ksize=seuil)
 
-    image_harrised = det - 0.04 * np.array(np.multiply(trace, trace))
+        return Ix, Iy
 
-    #  Maintenant qu'on a une image de harris, on va lui faire quelques modifications
-    #  On met les points sur les bords et les points d'intensite negative a 0
-    #  Et on selectionne les maxima locaux sur une largeur de 3
+    def gaussian_blur(self, smoothing_factor):
+        """
+        On calcule puis on lisse Ix2 , Ix2 et Ixy avec un filtre gaussien
+        Parameters
+        ----------
+        smoothing_factor
 
-    new_image_harris = []
+        Returns
+        -------
+        Ix2, Iy2, Ixy
 
-    for j in range(len(image_harrised)):
-        line = []
-        for i in range(len(image_harrised[0])):
-            #  Si on est sur un bord, on met la valeur 0
-            if image_harrised[j][i] < 0 or i <= 1 or j <= 1 or i >= len(image_harrised[0]) - 1 or j >= len(
-                    image_harrised) - 1:
-                line.append(0)
-            else:
-                # Sinon, on calcule si la valeur actuelle est plus elevee que
-                # toutes celles autour.
-                if image_harrised[j][i] > max(max([image_harrised[j - 1][i - 1 + k] for k in range(3)]),
-                                              max([image_harrised[j][i - 1 + k]
-                                                   for k in range(3) if k != 1]),
-                                              max([image_harrised[j + 1][i - 1 + k] for k in range(3)])):
-                    line.append(image_harrised[j][i])
+        """
+        Ix2 = cv2.GaussianBlur(np.multiply(self.Ix, self.Ix), smoothing_factor, 0)
+        Iy2 = cv2.GaussianBlur(np.multiply(self.Iy, self.Iy), smoothing_factor, 0)
+        Ixy = cv2.GaussianBlur(np.multiply(self.Ix, self.Iy), smoothing_factor, 0)
 
-                else:
+        return Ix2, Iy2, Ixy
+
+    def harris_function(self):
+        """
+        On utilise la formule de Harris pour obtenir une nouvelle image
+        """
+        det = np.multiply(self.Ix2, self.Iy2) - np.multiply(self.Ixy, self.Ixy)
+        trace = np.add(self.Iy2, self.Ix2)
+
+        img_harris = det - 0.04 * np.array(np.multiply(trace, trace))
+        img_harris = np.array(img_harris)
+
+        return img_harris
+
+    def image_improvement(self):
+        """
+        Maintenant qu'on a une image de harris, on va lui faire quelques modifications
+        On met les points sur les bords et les points d'intensité négative à 0
+        Et on sélectionne les maxima locaux sur une largeur de 3
+        """
+        new_image_harris = []
+
+        # TODO: simplifier et vérifier
+        for j in range(len(self.img_harris)):
+            line = []
+            for i in range(len(self.img_harris[0])):
+
+                #  Si on est sur un bord, on met la valeur 0
+                if self.img_harris[j][i] < 0 or i <= 1 or j <= 1 or i >= len(self.img_harris[0]) - 1 or j >= len(
+                        self.img_harris) - 1:
                     line.append(0)
 
-        new_image_harris.append(line)
+                # Sinon, on calcule si la valeur actuelle est plus élevée que toutes celles autour
+                else:
 
-    new_image_harris = np.array(new_image_harris)
+                    if self.img_harris[j][i] > max(max([self.img_harris[j - 1][i - 1 + k] for k in range(3)]),
+                                                   max([self.img_harris[j][i - 1 + k]
+                                                        for k in range(3) if k != 1]),
+                                                   max([self.img_harris[j + 1][i - 1 + k] for k in range(3)])):
+                        line.append(self.img_harris[j][i])
 
-    #  On obtient une nouvelle image apres transformation. On va maintenant prendre tous les points
-    #  d'intensite non negative, et les trier dans une liste
+                    else:
+                        line.append(0)
 
-    liste_points = []
+            new_image_harris.append(line)
+            self.img_harris = np.array(new_image_harris)
 
-    for j in range(len(new_image_harris)):
-        for i in range(len(new_image_harris[0])):
-            if new_image_harris[j][i] > 0:
-                liste_points = tri_insertion(
-                    liste_points, (new_image_harris[j][i], i, j))
+    def plot(self):
+        """
+        On obtient une nouvelle image après transformation. On va maintenant prendre tous les points
+        d'intensité non négative, et les trier dans une liste, pour enfin tracer
+        """
+        liste_points = []
 
-    # J'affiche ensuite l'image initiale avec les 50 points les plus
-    # importants:
-    liste_points = liste_points[:50]
+        for j in range(len(self.img_harris)):
+            for i in range(len(self.img_harris[0])):
+                if self.img_harris[j][i] > 0:
+                    liste_points = self.insertion_sort(
+                        liste_points, (self.img_harris[j][i], i, j))
 
-    #  Je trace des petits cercles autour de ces points importantss
-    for point in liste_points:
-        x = point[1]
-        y = point[2]
-        cv2.circle(img, (x, y), 3, 255, 4)
+        # J'affiche ensuite l'image initiale avec les 50 points les plus importants
+        liste_points = liste_points[:50]
 
-    plt.subplot(121), plt.imshow(img, cmap='gray')
-    plt.title('Image initiale'), plt.xticks([]), plt.yticks([])
-    plt.subplot(122), plt.imshow(new_image_harris, cmap='gray')
-    plt.title('Image avec transformation de Harris'), plt.xticks(
-        []), plt.yticks([])
+        # Je trace des petits cercles autour de ces points importants
+        for point in liste_points:
+            x = point[1]
+            y = point[2]
+            cv2.circle(self.img, (x, y), 3, 255, 4)
 
-    plt.show()
+        plt.subplot(121), plt.imshow(self.img, cmap='gray')
+        plt.title('Image initiale'), plt.xticks([]), plt.yticks([])
+        plt.subplot(122), plt.imshow(self.img_harris, cmap='gray')
+        plt.title('Image avec transformation de Harris'), plt.xticks(
+            []), plt.yticks([])
 
+        plt.show()
 
-def tri_insertion(liste, (intensite, x, y)):
-    #  Tri insertion suppose que la liste en argument est deja triee
-    if len(liste) == 0:
-        return [(intensite, x, y)]
-    else:
-        for i in range(len(liste)):
-            if intensite > liste[i][0]:
-                return liste[:i] + [(intensite, x, y)] + liste[i:]
+    @staticmethod
+    def insertion_sort(list, (intensity, x, y)):
+        #  Tri insertion suppose que la liste en argument est déjà triée
+        if len(list) == 0:
+            return [(intensity, x, y)]
+        else:
+            for i in range(len(list)):
+                if intensity > list[i][0]:
+                    return list[:i] + [(intensity, x, y)] + list[i:]
 
-        return liste + [(intensite, x, y)]
+            return list + [(intensity, x, y)]
 
 
 # calcul_similarite(michelangelo_origin, michelangelo_tilt)
-calcul_similarite(filename2, filename1)
-# homemade_harris(filename2)
+# calcul_similarite(filename2, filename1)
 
 # corner_harris(filename1)
 
-#corner_shi_tomasi(filename2)
-#corner_sift(michelangelo_origin)
+# corner_shi_tomasi(filename4)
 
-#bfmatcher(michelangelo_origin, michelangelo_tilt)
-#flannmatcher(michelangelo_origin, michelangelo_tilt)
+# bfmatcher(michelangelo_origin, michelangelo_tilt)
+# flannmatcher(michelangelo_origin, michelangelo_tilt)
+
+homemade_harris = HomemadeHarris(filename2)
+homemade_harris.image_improvement()
+homemade_harris.plot()
