@@ -17,7 +17,7 @@ import cv2
 from matplotlib import pyplot as plt
 
 # active des print de debug
-DEBUG = True
+DEBUG = False
 
 # où sont enregistrer les images, et où les sauvegarder
 CURRENT_PATH = os.getcwd()
@@ -467,7 +467,7 @@ def benchmark(Detector, extra_args, use_test_data=True):
     tp_avg = np.mean(true_positive_rates)
     tp_std = np.std(true_positive_rates)
     fp_avg = np.mean(false_positive_rates)
-    fp_std = np.mean(false_positive_rates)
+    fp_std = np.std(false_positive_rates)
 
     print("Benchmark finished for %s(%s)" % (Detector.__name__, extra_args))
 
@@ -525,9 +525,10 @@ if __name__ == "__main__":
     # find_best_seuil("LAB")  # Meilleur seuil pour LAB: 0.15
     # find_best_seuil("HSV")  # Meilleur seuil pour HSV: 0.15
 
-    # Benchmark sur les données d'entrainement
+    # Benchmark sur les données d'entrainement. voir resultat dans le CR
     full_benchmark(use_test_data=False)
-    # Benchmark sur les données de tests
+
+    # Benchmark sur les données de tests. voir resultats dans le CR
     full_benchmark(use_test_data=True)
 
 
