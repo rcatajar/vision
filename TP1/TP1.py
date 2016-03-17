@@ -293,7 +293,8 @@ def histograms(color_space):
         # print_histogram(hist_not_skin)
 
     # Calcule ratio pixel peau / non peau
-    ratio_skin = np.sum(hist_skin) / (np.sum(hist_skin) + np.sum(hist_not_skin))
+    ratio_skin = np.sum(
+        hist_skin) / (np.sum(hist_skin) + np.sum(hist_not_skin))
     print ratio_skin
 
     # Normalise les histogrammes
@@ -335,8 +336,8 @@ class BasicHistogramDetector(AbstractSkinDetector):
         self.set_name()
         super(BasicHistogramDetector, self).__init__(img_name)
 
-        def set_name(self):
-            self.METHOD_NAME = "histogram_%s" % self.color_space
+    def set_name(self):
+        self.METHOD_NAME = "histogram_%s" % self.color_space
 
     def set_histogram(self):
         """
@@ -415,7 +416,8 @@ class BayesHistogramDetector(BasicHistogramDetector):
         ratio_skin = self.ratio_skin
         ratio_not_skin = 1 - self.ratio_skin
 
-        p = (p_skin * ratio_skin) / (p_skin * ratio_skin + p_not_skin * ratio_not_skin)
+        p = (p_skin * ratio_skin) / \
+            (p_skin * ratio_skin + p_not_skin * ratio_not_skin)
         return bool(p > self.seuil)
 
 
@@ -430,7 +432,7 @@ def find_best_seuil(color_space):
     # Pour chercher le meilleur score on va chercher a maximiser le taux de bonne detection
     # et minimiser celui de mauvaise Detection sur les données d'entrainement.
     # Pour cela, on cherche à maximiser leur différence
-    for seuil in np.arange(0.1, 1, 0.1):  # test de 0.1 à 0.9
+    for seuil in np.arange(0.05, 0.3, 0.05):
         tp_avg, tp_std, fp_avg, fp_std = benchmark(
             BayesHistogramDetector, [color_space, seuil], False)
         score = tp_avg - fp_avg
@@ -454,7 +456,8 @@ def benchmark(Detector, extra_args, use_test_data=True):
     false_positive_rates = []
 
     for image_name in (test_dataset() if use_test_data else train_dataset()):
-        detector = Detector(image_name, *extra_args) if extra_args else Detector(image_name)
+        detector = Detector(
+            image_name, *extra_args) if extra_args else Detector(image_name)
         true_positive_rate, false_positive_rate = detector.rates()
         true_positive_rates.append(true_positive_rate)
         false_positive_rates.append(false_positive_rate)
@@ -480,10 +483,10 @@ def full_benchmark(use_test_data=True):
     dataset_name = "test" if use_test_data else "training"
 
     # seuils pour la méthode de Bayes
-    # On determine le seuil qui maximise les résultats sur les données d'entrainement
-    seuil_RGB = find_best_seuil("RGB")
-    seuil_LAB = find_best_seuil("LAB")
-    seuil_HSV = find_best_seuil("HSV")
+    # obtenu via la fonction find_best_seuil
+    seuil_RGB = 0.2
+    seuil_LAB = 0.15
+    seuil_HSV = 0.15
 
     METHODS = {
         "Peer et Al": (PeerSkinDetector, None),
@@ -514,6 +517,14 @@ def full_benchmark(use_test_data=True):
     return results
 
 if __name__ == "__main__":
+    # Calcul des meilleurs seuils pour la methode de Bayes
+    # Commenté car prends bcp de temps. Les resultats sont indiqués dans le commentaire
+    #(test 5 valeurs de seuil differentes sur les ~50 photos d'entrainements)
+
+    # find_best_seuil("RGB")  # Meilleur seuil pour RGB: 0.2
+    # find_best_seuil("LAB")  # Meilleur seuil pour LAB: 0.15
+    # find_best_seuil("HSV")  # Meilleur seuil pour HSV: 0.15
+
     # Benchmark sur les données d'entrainement
     full_benchmark(use_test_data=False)
     # Benchmark sur les données de tests
