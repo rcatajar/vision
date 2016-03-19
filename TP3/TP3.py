@@ -286,14 +286,21 @@ class HomemadeHarris:
     Question 2
     """
 
-    def __init__(self, source, seuil_sobel=5, smoothing_factor=(5, 5)):
+    def __init__(self, source, seuil_sobel=5, smoothing_factor=(5, 5), window_size=3, nb_best_points=10000):
         self.source = source
         self.img = cv2.imread(source, 0)
+
+        self.window_size = window_size
+        self.nb_best_points = nb_best_points
 
         self.Ix, self.Iy = self.sobel_transformation(seuil_sobel)
         self.Ixy, self.Ix2, self.Iy2 = self.gaussian_blur(smoothing_factor)
 
-        self.img_harris = self.harris_function()
+        self.img_harris = self.harris_function(self.Ix2, self.Iy2, self.Ixy)
+
+        print "Initialisation finie, je passe à l'amélioration de l'image"
+        self.image_improvement()
+        print "Amélioration de l'image finie"
 
     def sobel_transformation(self, seuil):
         """
@@ -330,27 +337,12 @@ class HomemadeHarris:
 
         return Ix2, Iy2, Ixy
 
-    def harris_function(self):
-        """
-        On utilise la formule de Harris pour obtenir une nouvelle image
-        """
-        det = np.multiply(self.Ix2, self.Iy2) - np.multiply(self.Ixy, self.Ixy)
-        trace = np.add(self.Iy2, self.Ix2)
-
-        img_harris = det - 0.04 * np.array(np.multiply(trace, trace))
-        img_harris = np.array(img_harris)
-
-        return img_harris
-
     def image_improvement(self):
         """
         Maintenant qu'on a une image de harris, on va lui faire quelques modifications
         On met les points sur les bords et les points d'intensité négative à 0
         Et on sélectionne les maxima locaux sur une largeur de 3
         """
-        new_image_harris = []
-
-        print self.img_harris.shape
 
         # Les intensités négatives sont mises à 0
         np.clip(self.img_harris, 0, 255)
@@ -358,33 +350,27 @@ class HomemadeHarris:
         # On met les bords à 0 pour avoir plus de fiabilité sur les maxima
         self.img_harris = self.border_to_zeros(self.img_harris)
 
-        # On calcule les maxima locaux sur une largeur de 3
-        self.img_harris = self.local_maxima(self.img_harris, 3)
+        # On calcule les maxima locaux sur une largeur de 20
+        self.img_harris = self.local_maxima(self.img_harris, self.window_size)
 
     def plot(self):
         """
         On obtient une nouvelle image après transformation. On va maintenant prendre tous les points
         d'intensité non négative, et les trier dans une liste, pour enfin tracer
         """
-        liste_points = []
 
-        for j in range(len(self.img_harris)):
-            for i in range(len(self.img_harris[0])):
-                if self.img_harris[j][i] > 0:
-                    liste_points = self.insertion_sort(
-                        liste_points, (self.img_harris[j][i], i, j))
+        # On prend l'image initiale avec les 1000 points les plus importants
+        # NB : le tri par insertion est long pour une fenêtre de 3
+        liste_points, intensites = self.insertion_sort(self.img_harris, self.nb_best_points)
 
-        # J'affiche ensuite l'image initiale avec les 50 points les plus importants
-        liste_points = liste_points[:50]
-
-        # Je trace des petits cercles autour de ces points importants
+        # On trace des petits cercles autour de ces points importants
         for point in liste_points:
             x = point[1]
-            y = point[2]
-            cv2.circle(self.img, (x, y), 3, 255, 4)
+            y = point[0]
+            cv2.circle(self.img, (x, y), 1, 255, 1)
 
         plt.subplot(121), plt.imshow(self.img, cmap='gray')
-        plt.title('Image initiale'), plt.xticks([]), plt.yticks([])
+        plt.title('Image initiale supperposée avec la transformation de Harris'), plt.xticks([]), plt.yticks([])
         plt.subplot(122), plt.imshow(self.img_harris, cmap='gray')
         plt.title('Image avec transformation de Harris'), plt.xticks(
             []), plt.yticks([])
@@ -392,13 +378,31 @@ class HomemadeHarris:
         plt.show()
 
     @staticmethod
+    def harris_function(Ix2, Iy2, Ixy):
+        """
+        On utilise la formule de Harris pour obtenir une nouvelle image
+        """
+        det = np.multiply(Ix2, Iy2) - np.multiply(Ixy, Ixy)
+        trace = np.add(Iy2, Ix2)
+
+        img_harris = det - 0.04 * np.array(np.multiply(trace, trace))
+        img_harris = np.array(img_harris)
+
+        return img_harris
+
+    @staticmethod
     def local_maxima(img, size=3):
         """
-        Ne garde que les maxima locaux d'une image pour une taille de voisinage donnée
+        Ne garde que les maxima locaux d'une image (numpy array) pour une taille de voisinage donnée
+
         Parameters
         ----------
         img : image dont on veut les maxima
         size : taille du voisinage (3 dans l'énoncé)
+
+        Returns
+        -------
+        Une image (numpy array) avec les maxima et la taille de l'image de départ
         """
         mx = maximum_filter(img, size=size)
         img = np.where(mx == img, img, 0)
@@ -409,9 +413,14 @@ class HomemadeHarris:
     def border_to_zeros(img):
         """
         On met à 0 tous les éléments du bord d'une image
+
         Parameters
         ----------
-        img : image dont on veut mettre les bords à 0
+        img : image (numpy array) dont on veut mettre les bords à 0
+
+        Returns
+        -------
+        L'image de départ (numpy array) avec ses bords à 0
         """
         result = np.zeros(img.shape, img.dtype)
         reduced_harris = img[1:img.shape[0] - 1, 1:img.shape[1] - 1]
@@ -420,17 +429,37 @@ class HomemadeHarris:
         return result
 
     @staticmethod
-    def insertion_sort(list, (intensity, x, y)):
-        #  Tri insertion suppose que la liste en argument est déjà triée
-        if len(list) == 0:
-            return [(intensity, x, y)]
-        else:
-            for i in range(len(list)):
-                if intensity > list[i][0]:
-                    return list[:i] + [(intensity, x, y)] + list[i:]
+    def insertion_sort(array, n):
+        """
+        Prend un tableau d'intensités et sort les coordonnées des n plus grands termes
 
-            return list + [(intensity, x, y)]
+        Parameters
+        ----------
+        array : un tableau d'intensités
+        n : le nombre de termes que nous voulons
 
+        Returns
+        -------
+        Les indices des n plus grands termes d'un tableau trié,
+        Les n plus grands termes d'un tableau trié
+        """
+        sorted_list = []
+        index_list = []
+        c = -1
+
+        for index, x in np.ndenumerate(array):
+
+            if x > 0:  # On ne prend que les points d'intensité non nulle
+                insertion_idx = np.searchsorted(sorted_list, x)
+                sorted_list = np.insert(sorted_list, insertion_idx, x)
+                index_list = index_list[:insertion_idx] + [index] + index_list[insertion_idx:]
+
+            # Pour suivre la progression du tri
+            if c != index[0]:
+                c = index[0]
+                print "Tri par insertion : ", index[0], " - ", len(array)
+
+        return index_list[::-1][:n], sorted_list[::-1][:n]
 
 # calcul_similarite(michelangelo_origin, michelangelo_tilt)
 # calcul_similarite(filename2, filename1)
@@ -444,6 +473,6 @@ class HomemadeHarris:
 
 
 if __name__ == "__main__":
-    homemade_harris = HomemadeHarris(filename2)
-    homemade_harris.image_improvement()
+    homemade_harris = HomemadeHarris(filename2, window_size=10)
     homemade_harris.plot()
+
