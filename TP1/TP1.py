@@ -11,13 +11,13 @@ romain.catajar@student.ecp.fr
 '''
 
 import os
-
+from itertools import chain
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 
 # active des print de debug
-DEBUG = False
+DEBUG = True
 
 # où sont enregistrer les images, et où les sauvegarder
 CURRENT_PATH = os.getcwd()
@@ -116,6 +116,8 @@ class Image(object):
             color = cv2.COLOR_BGR2RGB
         elif space == "LAB":
             color = cv2.COLOR_BGR2LAB
+        elif space == "GRAY":
+            color = cv2.COLOR_BGR2GRAY
         self.img = cv2.cvtColor(self.img, color)
         return self
 
@@ -446,6 +448,40 @@ def find_best_seuil(color_space):
     return best_seuil
 
 
+class HaarCascadeFaceDetector(AbstractSkinDetector):
+    """
+    Detecteur de visage avec la méthode de Viola Jones
+    (Haar cascades classifier avec opencv)
+    """
+    METHOD_NAME = "viola_jones"
+
+    def process(self):
+        # image en nuance de gris pour les haar cascades
+        self.original = self.original.switch_color_space("GRAY")
+        cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+
+        # detections des visages
+        faces = cascade.detectMultiScale(self.original.img, scaleFactor=1.1,
+                                         minNeighbors=5, minSize=(30, 30),
+                                         flags = cv2.cv.CV_HAAR_SCALE_IMAGE)
+
+        if DEBUG:
+            print("%s faces detected" % len(faces))
+
+        # On dessine des rectangles autour des visages sur l'image resultat
+        for (x, y, w, h) in faces:
+            cv2.rectangle(self.result.img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        self.result.save()
+
+
+def run_haar_cascade():
+    """
+    Detecte les visages via cascades de haar sur toutes les images
+    """
+    for img_name in chain(train_dataset(), test_dataset()):
+        _ = HaarCascadeFaceDetector(img_name)
+
+
 def benchmark(Detector, extra_args, use_test_data=True):
     """
     Run un benchmark du detecteur passé en arg
@@ -519,7 +555,7 @@ def full_benchmark(use_test_data=True):
 if __name__ == "__main__":
     # Calcul des meilleurs seuils pour la methode de Bayes
     # Commenté car prends bcp de temps. Les resultats sont indiqués dans le commentaire
-    #(test 5 valeurs de seuil differentes sur les ~50 photos d'entrainements)
+    #  (test 5 valeurs de seuil differentes sur les ~50 photos d'entrainements)
 
     # find_best_seuil("RGB")  # Meilleur seuil pour RGB: 0.2
     # find_best_seuil("LAB")  # Meilleur seuil pour LAB: 0.15
@@ -531,6 +567,5 @@ if __name__ == "__main__":
     # Benchmark sur les données de tests. voir resultats dans le CR
     full_benchmark(use_test_data=True)
 
-
-# TODO:
-# Dernier modèle (classifieur Viola Jones)
+    # Méthode de Viola Jones
+    run_haar_cascade()
