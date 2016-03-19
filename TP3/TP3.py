@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import maximum_filter
 
+
 filename1 = 'points/bikes/img_7073.ppm'
 filename2 = 'points/bikes/img_7075.ppm'
 filename3 = 'points/bikes/img_7077.ppm'
@@ -96,14 +97,18 @@ def calcul_similarite(source1, source2):
         x, y = corner.ravel()
         cv2.circle(img2, (x, y), 3, 255, -1)
 
-    n = 10
-    p = 15
+    n = 30
+    p = 40
 
     # Puis pour chaque point des listes corners, on fait une fenêtre de taille (2N+1)x(2P+1)
     # On stocke ces fenêtres dans deux listes contenant les intensités des
     # points de cette fenêtre
-    list_windows1 = window_around(img1, corners1, n, p)
-    list_windows2 = window_around(img2, corners2, n, p)
+
+    blur1 = cv2.blur(img1, (3,3), 0)
+    blur2 = cv2.blur(img2, (3,3), 0)
+
+    list_windows1 = window_around(blur1, corners1, n, p)
+    list_windows2 = window_around(blur2, corners2, n, p)
 
     # On initialise le maximum avec une valeur très élevée afin d'être sûr
     # d'obtenir un minimum par la suite
@@ -114,7 +119,7 @@ def calcul_similarite(source1, source2):
     # dissimilarité
     for window1, point11, point12 in list_windows1:
         for window2, point21, point22 in list_windows2:
-            similarity = cost(window1, window2, "SSD")
+            similarity = cost(window1, window2, "SAD")
             if similarity < max_similarity:
                 max_similarity = similarity
                 image_1_top_left = point11
@@ -122,7 +127,7 @@ def calcul_similarite(source1, source2):
                 image_2_top_left = point21
                 image_2_bot_right = point22
 
-                plot_windows(source1, source2, image_1_top_left,
+    plot_windows(source1, source2, image_1_top_left,
                              image_1_bot_right, image_2_top_left, image_2_bot_right)
 
 
@@ -156,7 +161,7 @@ def plot_windows(source1, source2, image_1_top_left, image_1_bot_right, image_2_
 
 
 # Question 1.2
-def cost(window1, window2, type="SSD"):
+def cost(window1, window2, type="SAD"):
     """
 
     :param window1: la fenetre de l'image de gauche
@@ -169,12 +174,12 @@ def cost(window1, window2, type="SSD"):
         print "Les fenetres n'ont pas la meme taille"
         return KeyError
 
-    sum = 0
+    sum = 0.
 
     for j in range(len(window1)):
         for i in range(len(window1[0])):
             if type == "SSD":
-                sum += (window1[j][i] - window2[j][i]) ** 2
+                sum += pow((window1[j][i] - window2[j][i]), 2)
             elif type == "SAD":
                 sum += abs(window1[j][i] - window2[j][i])
             else:
@@ -218,6 +223,7 @@ def bfmatcher(source1, source2):
 
     # Initiate SIFT detector
     orb = cv2.ORB_create()
+    cv2.ocl.setUseOpenCL(False)
 
     # find the keypoints and descriptors with SIFT
     kp1, des1 = orb.detectAndCompute(img1, None)
@@ -286,7 +292,7 @@ class HomemadeHarris:
     Question 2
     """
 
-    def __init__(self, source, seuil_sobel=5, smoothing_factor=(5, 5), window_size=3, nb_best_points=10000):
+    def __init__(self, source, seuil_sobel=5, smoothing_factor=(5, 5), window_size=3, nb_best_points=200):
         self.source = source
         self.img = cv2.imread(source, 0)
 
@@ -294,12 +300,14 @@ class HomemadeHarris:
         self.nb_best_points = nb_best_points
 
         self.Ix, self.Iy = self.sobel_transformation(seuil_sobel)
+
         self.Ixy, self.Ix2, self.Iy2 = self.gaussian_blur(smoothing_factor)
 
         self.img_harris = self.harris_function(self.Ix2, self.Iy2, self.Ixy)
 
         print "Initialisation finie, je passe à l'amélioration de l'image"
         self.image_improvement()
+
         print "Amélioration de l'image finie"
 
     def sobel_transformation(self, seuil):
@@ -370,7 +378,7 @@ class HomemadeHarris:
             cv2.circle(self.img, (x, y), 1, 255, 1)
 
         plt.subplot(121), plt.imshow(self.img, cmap='gray')
-        plt.title('Image initiale supperposée avec la transformation de Harris'), plt.xticks([]), plt.yticks([])
+        plt.title('Image initiale superposee avec la transformation de Harris'), plt.xticks([]), plt.yticks([])
         plt.subplot(122), plt.imshow(self.img_harris, cmap='gray')
         plt.title('Image avec transformation de Harris'), plt.xticks(
             []), plt.yticks([])
@@ -428,6 +436,7 @@ class HomemadeHarris:
 
         return result
 
+
     @staticmethod
     def insertion_sort(array, n):
         """
@@ -461,18 +470,10 @@ class HomemadeHarris:
 
         return index_list[::-1][:n], sorted_list[::-1][:n]
 
-# calcul_similarite(michelangelo_origin, michelangelo_tilt)
-# calcul_similarite(filename2, filename1)
-
-# corner_harris(filename1)
-
-# corner_shi_tomasi(filename4)
-
-# bfmatcher(michelangelo_origin, michelangelo_tilt)
-# flannmatcher(michelangelo_origin, michelangelo_tilt)
 
 
 if __name__ == "__main__":
-    homemade_harris = HomemadeHarris(filename2, window_size=10)
+    calcul_similarite(michelangelo_origin, michelangelo_tilt)
+    bfmatcher(graf1, graf2)
+    homemade_harris = HomemadeHarris(filename1, window_size=10)
     homemade_harris.plot()
-
