@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.ndimage import maximum_filter
 
 filename1 = 'points/bikes/img_7073.ppm'
 filename2 = 'points/bikes/img_7075.ppm'
@@ -122,7 +123,7 @@ def calcul_similarite(source1, source2):
                 image_2_bot_right = point22
 
                 plot_windows(source1, source2, image_1_top_left,
-                            image_1_bot_right, image_2_top_left, image_2_bot_right)
+                             image_1_bot_right, image_2_top_left, image_2_bot_right)
 
 
 # Question 1.2
@@ -214,7 +215,6 @@ def window_around(img, corners, n, p):
 def bfmatcher(source1, source2):
     img1 = cv2.imread(source1, 0)  # queryImage
     img2 = cv2.imread(source2, 0)  # trainImage
-
 
     # Initiate SIFT detector
     orb = cv2.ORB_create()
@@ -350,30 +350,16 @@ class HomemadeHarris:
         """
         new_image_harris = []
 
-        # TODO: simplifier et vérifier
-        for j in range(len(self.img_harris)):
-            line = []
-            for i in range(len(self.img_harris[0])):
+        print self.img_harris.shape
 
-                #  Si on est sur un bord, on met la valeur 0
-                if self.img_harris[j][i] < 0 or i <= 1 or j <= 1 or i >= len(self.img_harris[0]) - 1 or j >= len(
-                        self.img_harris) - 1:
-                    line.append(0)
+        # Les intensités négatives sont mises à 0
+        np.clip(self.img_harris, 0, 255)
 
-                # Sinon, on calcule si la valeur actuelle est plus élevée que toutes celles autour
-                else:
+        # On met les bords à 0 pour avoir plus de fiabilité sur les maxima
+        self.img_harris = self.border_to_zeros(self.img_harris)
 
-                    if self.img_harris[j][i] > max(max([self.img_harris[j - 1][i - 1 + k] for k in range(3)]),
-                                                   max([self.img_harris[j][i - 1 + k]
-                                                        for k in range(3) if k != 1]),
-                                                   max([self.img_harris[j + 1][i - 1 + k] for k in range(3)])):
-                        line.append(self.img_harris[j][i])
-
-                    else:
-                        line.append(0)
-
-            new_image_harris.append(line)
-            self.img_harris = np.array(new_image_harris)
+        # On calcule les maxima locaux sur une largeur de 3
+        self.img_harris = self.local_maxima(self.img_harris, 3)
 
     def plot(self):
         """
@@ -406,6 +392,34 @@ class HomemadeHarris:
         plt.show()
 
     @staticmethod
+    def local_maxima(img, size=3):
+        """
+        Ne garde que les maxima locaux d'une image pour une taille de voisinage donnée
+        Parameters
+        ----------
+        img : image dont on veut les maxima
+        size : taille du voisinage (3 dans l'énoncé)
+        """
+        mx = maximum_filter(img, size=size)
+        img = np.where(mx == img, img, 0)
+
+        return img
+
+    @staticmethod
+    def border_to_zeros(img):
+        """
+        On met à 0 tous les éléments du bord d'une image
+        Parameters
+        ----------
+        img : image dont on veut mettre les bords à 0
+        """
+        result = np.zeros(img.shape, img.dtype)
+        reduced_harris = img[1:img.shape[0] - 1, 1:img.shape[1] - 1]
+        result[1:-1, 1:-1] = reduced_harris
+
+        return result
+
+    @staticmethod
     def insertion_sort(list, (intensity, x, y)):
         #  Tri insertion suppose que la liste en argument est déjà triée
         if len(list) == 0:
@@ -428,6 +442,8 @@ class HomemadeHarris:
 # bfmatcher(michelangelo_origin, michelangelo_tilt)
 # flannmatcher(michelangelo_origin, michelangelo_tilt)
 
-homemade_harris = HomemadeHarris(filename2)
-homemade_harris.image_improvement()
-homemade_harris.plot()
+
+if __name__ == "__main__":
+    homemade_harris = HomemadeHarris(filename2)
+    homemade_harris.image_improvement()
+    homemade_harris.plot()
