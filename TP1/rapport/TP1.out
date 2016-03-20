@@ -1,0 +1,11 @@
+\BOOKMARK [1][-]{section.4}{Approche 1: Detection de la peau}{}% 1
+\BOOKMARK [2][-]{subsection.4.1}{Avant de commencer}{section.4}% 2
+\BOOKMARK [2][-]{subsection.4.2}{A vous de jouer}{section.4}% 3
+\BOOKMARK [3][-]{subsubsection.4.2.1}{Base d'images}{subsection.4.2}% 4
+\BOOKMARK [3][-]{subsubsection.4.2.2}{Une premi\350re m\351thode simple}{subsection.4.2}% 5
+\BOOKMARK [3][-]{subsubsection.4.2.3}{Approche non param\351trique: Histogramme et mod\350le de peau}{subsection.4.2}% 6
+\BOOKMARK [3][-]{subsubsection.4.2.4}{M\351thode de Bayes}{subsection.4.2}% 7
+\BOOKMARK [3][-]{subsubsection.4.2.6}{Discussion}{subsection.4.2}% 8
+\BOOKMARK [1][-]{section.5}{Detection de visages par l'approche de Viola Jones}{}% 9
+\BOOKMARK [2][-]{subsection.5.1}{Etude de la methode}{section.5}% 10
+\BOOKMARK [2][-]{subsection.5.2}{Discussion: pour aller plus loin!}{section.5}% 11
