@@ -17,7 +17,12 @@ michelangelo_tilt = 'points/dataset_MorelYu09/Absolute_Tilt_Tests/painting_zoom_
 
 
 class ImageMatcher:
+    """
+    Question 1
+    """
     def __init__(self, source1, source2, corner_method="shi_tomasi"):
+
+        # On importe les images, et on les convertit directement en nuances de gris
         self.img1 = cv2.imread(source1, 0)
         self.img2 = cv2.imread(source2, 0)
 
@@ -40,12 +45,16 @@ class ImageMatcher:
         # On prend la fonction du dictionnaire
         self.corner_method = switcher.get(switch, lambda: "nothing")
 
-    def calcul_similarite(self):
+    def calcul_similarite(self, n=20, p=30):
         """
         Question 1.2
-        :param source1: le chemin de l'image de gauche
-        :param source2: le chemin de l'image de droite
-        :return: la fenêtre de plus grande similarité entre les deux images
+
+        Trace les fenêtres de plus grandes similarités entre les deux images.
+
+        Parameters
+        ----------
+        n: largeur des fenêtres
+        p: hauteur des fenêtres
         """
 
         # Dans un premier temps on récupère la liste de tous les points d'importance des images 1 et 2
@@ -58,9 +67,6 @@ class ImageMatcher:
         for corner in corners2:
             x, y = corner.ravel()
             cv2.circle(self.img2, (x, y), 1, 255, -1)
-
-        n = 20
-        p = 30
 
         # Puis pour chaque point des listes corners, on fait une fenêtre de taille (2N+1)x(2P+1)
         # On stocke ces fenêtres dans deux listes contenant les intensités des
@@ -83,10 +89,6 @@ class ImageMatcher:
         for window1, point11, point12 in list_windows1:
             for window2, point21, point22 in list_windows2:
 
-                c += 1
-                per = c /float((len(list_windows1)*len(list_windows2))) * 100.
-                # print c, " - ", len(list_windows1)*len(list_windows2), " --- ", per, "%"
-
                 similarity = self.cost(window1, window2)
                 if similarity < max_similarity:
                     max_similarity = similarity
@@ -96,8 +98,7 @@ class ImageMatcher:
                     image_2_top_left = point21
                     image_2_bot_right = point22
 
-                    # print image_1_bot_right
-                    # print image_1_top_left
+                    # On plot en dessous d'un certain seuil afin d'afficher plusieurs points de similarité
                     if max_similarity < 150000:
                         self.plot_windows(self.img1, self.img2, image_1_top_left, image_1_bot_right, image_2_top_left,
                               image_2_bot_right)
@@ -106,17 +107,19 @@ class ImageMatcher:
     def corner_harris(source):
         """
         Question 1.1
+
         Parameters
         ----------
-        source
+        source: l'image initiale
 
         Returns
         -------
-
+        corners: liste de coordonées des points d'intérêt
         """
+        # On récupère les distances minimales pour chaque point de l'image
         dst = cv2.cornerHarris(source, 2, 3, 0.04)
 
-        # Threshold for an optimal value, it may vary depending on the image.
+        # Seuil empirique pour définir les valeurs que l'on garde
         dst[dst < 0.001 * dst.max()] = 0
 
         corners = []
@@ -136,13 +139,14 @@ class ImageMatcher:
     def corner_sift(source):
         """
         Question 1.1
+
         Parameters
         ----------
-        source
+        source: l'image initiale
 
         Returns
         -------
-
+        corners: liste de coordonées des points d'intérêt
         """
         sift = cv2.xfeatures2d.SIFT_create()
         kp = sift.detect(source, None)
@@ -163,13 +167,14 @@ class ImageMatcher:
     def corner_shi_tomasi(source):
         """
         Question 1.1
+
         Parameters
         ----------
-        source
+        source: l'image initiale
 
         Returns
         -------
-
+        corners: liste de coordonées des points d'intérêt
         """
         corners = cv2.goodFeaturesToTrack(source, 25, 0.01, 10)
         corners = np.int0(corners)
@@ -183,11 +188,19 @@ class ImageMatcher:
     @staticmethod
     def cost(window1, window2, type="SAD"):
         """
+        Question 1.2
 
-        :param window1: la fenetre de l'image de gauche
-        :param window2: la fenetre de l'image de droite
-        :param type: le type de cout que l'on souhaite utiliser ici. Seulement SSD et SAD sont implementes
-        :return: resultat de la fonction de dissimilarite
+        Calcul du coût pour deux fenêtres données. Plusieurs types de fonction possibles.
+
+        Parameters
+        ----------
+        window1: la fenêtre de l'image de gauche
+        window2 la fenêtre de l'image de droite
+        type: le type de coût que l'on souhaite utiliser ici. Seuls SSD et SAD sont implementés
+
+        Returns
+        -------
+        sum: résultat de la fonction de dissimilarité
         """
 
         if not len(window1) == len(window2) and len(window1[0]) == len(window2[0]):
@@ -208,23 +221,26 @@ class ImageMatcher:
         return sum
 
     @staticmethod
-    def window_around(img, corners, n, p):
+    def window_around(source, corners, n, p):
         """
         Question 1.2
+
         Parameters
         ----------
-        img: l'image initiale
+        source: l'image initiale
         corners: une liste de coordonnées de points autour desquelles on veut une fenêtre
         n: la largeur de la fenêtre
         p: la hauteur de la fenêtre
+
         Returns
         -------
-
+        list_of_windows: liste sous la forme [fenêtre, coin_haut_gauche(x,y), coin_bas_droit(x,y)],
+            "fenêtre" étant un tableau numpy de taille (2N+1)x(2P+1)
         """
 
         list_of_windows = []
 
-        size_y, size_x = img.shape
+        size_y, size_x = source.shape
 
         for corner in corners:
             x = corner[0][0]
@@ -232,7 +248,7 @@ class ImageMatcher:
 
             # On vérifie qu'on ne sort pas de l'image
             if x > n and y > p and x + n < size_x and y + p < size_y:
-                window = img[y - p:y + p + 1, x - n:x + n + 1]
+                window = source[y - p:y + p + 1, x - n:x + n + 1]
 
                 list_of_windows.append(
                     [window, (x - n, y - p), (x + n, y + p)])
@@ -242,6 +258,9 @@ class ImageMatcher:
     @staticmethod
     def plot_windows(source1, source2, image_1_top_left, image_1_bot_right, image_2_top_left, image_2_bot_right):
         """
+        Question 1.2
+
+        Affiche les deux images sources avec les fenêtres de similarité
 
         Parameters
         ----------
@@ -268,14 +287,12 @@ class ImageMatcher:
         """
         Question 1.3
 
+        Trace les mises en correspondance des caractéristiques de deux images selon la méthode de "Brute Force"
+
         Parameters
         ----------
-        source1
-        source2
-
-        Returns
-        -------
-
+        source1: la source de l'image de gauche
+        source2: la source de l'image de droite
         """
         # Initiate SIFT detector
         orb = cv2.ORB_create()
@@ -304,17 +321,15 @@ class ImageMatcher:
         """
         Question 1.3
 
-        Soucis sur Ubuntu, OpenCV 3.1.0. Il semblerait que ce soit un bug
+        Trace les mises en correspondance des caractéristiques de deux images selon la méthode de "Brute Force"
+
+        Problèmes sur Ubuntu et Mac, OpenCV 3.1.0. Il semblerait que ce soit un bug lié à OpenCV
         https://github.com/Itseez/opencv/issues/5667
-        Update : même soucis sur Mac. C'est bien lié à OpenCV
+
         Parameters
         ----------
-        source1
-        source2
-
-        Returns
-        -------
-
+        source1: la source de l'image de gauche
+        source2: la source de l'image de droite
         """
 
         # Initiate SIFT detector
@@ -378,6 +393,7 @@ class HomemadeHarris:
         """
         On effectue des transformation de Sobel pour garder les gradients selon
         x et y
+
         Parameters
         ----------
         seuil : taille du noyau de Sobel; doit être 1, 3, 5 ou 7.
@@ -394,6 +410,7 @@ class HomemadeHarris:
     def gaussian_blur(self, smoothing_factor):
         """
         On calcule puis on lisse Ix2 , Ix2 et Ixy avec un filtre gaussien
+
         Parameters
         ----------
         smoothing_factor
@@ -474,7 +491,7 @@ class HomemadeHarris:
 
         Returns
         -------
-        Une image (numpy array) avec les maxima et la taille de l'image de départ
+        img: une image (numpy array) avec les maxima et la taille de l'image de départ
         """
         mx = maximum_filter(img, size=size)
         img = np.where(mx == img, img, 0)
@@ -492,7 +509,7 @@ class HomemadeHarris:
 
         Returns
         -------
-        L'image de départ (numpy array) avec ses bords à 0
+        result: l'image de départ (numpy array) avec ses bords à 0
         """
         result = np.zeros(img.shape, img.dtype)
         reduced_harris = img[1:img.shape[0] - 1, 1:img.shape[1] - 1]
