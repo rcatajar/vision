@@ -144,21 +144,6 @@ Les résultats présentés ci dessous sont basés sur ces seuils.
 \hline
 \multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
  & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
-\textit{Entrainement} & 0.88 & 0.15 & 0.26 & 0.21 \\ \hline
-\textit{Test} & 0.91 & 0.11 & 0.22 & 0.16 \\ \hline
-\end{tabular}%
-}
-\caption{Résultats avec la méthode de Bayes (HSV, seuil 0.15)}
-\label{bayes-hsv}
-\end{table}
-
-\begin{table}[h!]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{|c|c|c|c|c|}
-\hline
-\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
- & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
 \textit{Entrainement} & 0.82 & 0.20 & 0.16 & 0.12 \\ \hline
 \textit{Test} & 0.82 & 0.21 & 0.12 & 0.13 \\ \hline
 \end{tabular}%
@@ -167,7 +152,39 @@ Les résultats présentés ci dessous sont basés sur ces seuils.
 \label{bayes-rgb}
 \end{table}
 
-TODO: Tableau résultats, exemples
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.74 & 0.26 & 0.12 & 0.11 \\ \hline
+\textit{Test} & 0.73 & 0.28 & 0.08 & 0.10 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec la méthode de Bayes (LAB, seuil 0.15)}
+\label{bayes-lab}
+\end{table}
+
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Dataset}} & \multicolumn{2}{c|}{\textbf{Taux de bonne détection}} & \multicolumn{2}{c|}{\textbf{Taux de mauvaise détection}} \\ \cline{2-5} 
+ & \textit{Moyenne} & \textit{Ecart type} & \textit{Moyenne} & \textit{Ecart type} \\ \hline
+\textit{Entrainement} & 0.88 & 0.15 & 0.26 & 0.21 \\ \hline
+\textit{Test} & 0.91 & 0.11 & 0.22 & 0.16 \\ \hline
+\end{tabular}%
+}
+\caption{Résultats avec la méthode de Bayes (HSV, seuil 0.15)}
+\label{bayes-hsv}
+\end{table}
+
+TODO: Commentaires et exemples
 
 \subsubsection{Évaluation}
 
