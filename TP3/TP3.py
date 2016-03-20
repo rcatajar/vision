@@ -52,8 +52,6 @@ class ImageMatcher:
         corners1 = self.corner_method(self.img1)
         corners2 = self.corner_method(self.img2)
 
-        print 1
-
         for corner in corners1:
             x, y = corner.ravel()
             cv2.circle(self.img1, (x, y), 1, 255, -1)
@@ -61,10 +59,8 @@ class ImageMatcher:
             x, y = corner.ravel()
             cv2.circle(self.img2, (x, y), 1, 255, -1)
 
-        n = 10
-        p = 15
-
-        print 2
+        n = 20
+        p = 30
 
         # Puis pour chaque point des listes corners, on fait une fenêtre de taille (2N+1)x(2P+1)
         # On stocke ces fenêtres dans deux listes contenant les intensités des
@@ -89,22 +85,22 @@ class ImageMatcher:
 
                 c += 1
                 per = c /float((len(list_windows1)*len(list_windows2))) * 100.
-                print c, " - ", len(list_windows1)*len(list_windows2), "   ", per, "%"
+                # print c, " - ", len(list_windows1)*len(list_windows2), " --- ", per, "%"
 
                 similarity = self.cost(window1, window2)
                 if similarity < max_similarity:
                     max_similarity = similarity
+                    print max_similarity
                     image_1_top_left = point11
                     image_1_bot_right = point12
                     image_2_top_left = point21
                     image_2_bot_right = point22
 
-                    print image_1_bot_right
-                    print image_1_top_left
-
-        self.plot_windows(self.img1, self.img2, image_1_top_left, image_1_bot_right, image_2_top_left,
-                          image_2_bot_right)
-        print 4
+                    # print image_1_bot_right
+                    # print image_1_top_left
+                    if max_similarity < 150000:
+                        self.plot_windows(self.img1, self.img2, image_1_top_left, image_1_bot_right, image_2_top_left,
+                              image_2_bot_right)
 
     @staticmethod
     def corner_harris(source):
@@ -123,14 +119,18 @@ class ImageMatcher:
         # Threshold for an optimal value, it may vary depending on the image.
         dst[dst < 0.001 * dst.max()] = 0
 
-        corner = []
+        corners = []
         for index, x in np.ndenumerate(dst):
-            if x > 0.0001:
-                corner.append([[index[1], index[0]]])
+            if x > 0.00001:
+                corners.append([[index[1], index[0]]])
 
-        corner = np.array(corner)
+        corners = np.array(corners)
 
-        return corner
+        for i in corners:
+            x, y = i.ravel()
+            cv2.circle(source, (x, y), 3, 255, -1)
+
+        return corners
 
     @staticmethod
     def corner_sift(source):
@@ -147,13 +147,17 @@ class ImageMatcher:
         sift = cv2.xfeatures2d.SIFT_create()
         kp = sift.detect(source, None)
 
-        corner = []
+        corners = []
         for point in kp:
-            corner.append([[int(point.pt[0]), int(point.pt[1])]])
+            corners.append([[int(point.pt[0]), int(point.pt[1])]])
 
-        corner = np.array(corner)
+        corners = np.array(corners)
 
-        return corner
+        for i in corners:
+            x, y = i.ravel()
+            cv2.circle(source, (x, y), 3, 255, -1)
+
+        return corners
 
     @staticmethod
     def corner_shi_tomasi(source):
@@ -200,16 +204,6 @@ class ImageMatcher:
         else:
             print "L'argument type n'est pas bon dans la fonction cost"
             raise KeyError
-
-        # for j in range(len(window1)):
-        #     for i in range(len(window1[0])):
-        #         if type == "SSD":
-        #             sum += pow((window1[j][i] - window2[j][i]), 2)
-        #         elif type == "SAD":
-        #             sum += abs(window1[j][i] - window2[j][i])
-        #         else:
-        #             print "L'argument type n'est pas bon dans la fonction cost"
-        #             raise KeyError
 
         return sum
 
@@ -541,8 +535,7 @@ class HomemadeHarris:
 
 
 if __name__ == "__main__":
-    image_matcher = ImageMatcher(bike1, bike2, corner_method="harris")
-    # image_matcher = ImageMatcher(michelangelo_origin, michelangelo_tilt)
+    image_matcher = ImageMatcher(michelangelo_origin, michelangelo_tilt, corner_method="sift")
     image_matcher.calcul_similarite()
 
     # homemade_harris = HomemadeHarris(bike1, window_size=10)
