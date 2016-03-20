@@ -1,13 +1,13 @@
 # coding=utf-8
 import cv2
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 from scipy.ndimage import maximum_filter
 
-
-filename1 = 'points/bikes/img_7073.ppm'
-filename2 = 'points/bikes/img_7075.ppm'
-filename3 = 'points/bikes/img_7077.ppm'
+bike1 = 'points/bikes/img_7073.ppm'
+bike2 = 'points/bikes/img_7075.ppm'
+bike3 = 'points/bikes/img_7077.ppm'
 graf1 = 'points/graffiti/img1.ppm'
 graf2 = 'points/graffiti/img2.ppm'
 boat1 = 'points/boat/img0.pgm'
@@ -16,275 +16,319 @@ michelangelo_origin = 'points/dataset_MorelYu09/Absolute_Tilt_Tests/painting_zoo
 michelangelo_tilt = 'points/dataset_MorelYu09/Absolute_Tilt_Tests/painting_zoom_x10/adam_zoom10_45degR.pgm'
 
 
-# Question 1.1
-def corner_harris(source):
-    img = cv2.imread(source)
+class ImageMatcher:
+    def __init__(self, source1, source2, corner_method="shi_tomasi"):
+        self.img1 = cv2.imread(source1, 0)
+        self.img2 = cv2.imread(source2, 0)
+
+        # Pour passer la méthode qu'on veux utiliser, on utilise un dictionnaire
+        switcher = {
+            0: self.corner_harris,
+            1: self.corner_sift,
+            2: self.corner_shi_tomasi,
+        }
+
+        if corner_method == "harris":
+            switch = 0
+        elif corner_method == "sift":
+            switch = 1
+        elif corner_method == "shi_tomasi":
+            switch = 2
+        else:
+            print "Mauvaise corner_method"
+
+        # On prend la fonction du dictionnaire
+        self.corner_method = switcher.get(switch, lambda: "nothing")
+
+    def calcul_similarite(self):
+        """
+        Question 1.2
+        :param source1: le chemin de l'image de gauche
+        :param source2: le chemin de l'image de droite
+        :return: la fenêtre de plus grande similarité entre les deux images
+        """
+
+        # Dans un premier temps on récupère la liste de tous les points d'importance des images 1 et 2
+        corners1 = self.corner_method(self.img1)
+        corners2 = self.corner_method(self.img2)
+
+        for corner in corners1:
+            x, y = corner.ravel()
+            cv2.circle(self.img1, (x, y), 3, 255, -1)
+        for corner in corners2:
+            x, y = corner.ravel()
+            cv2.circle(self.img2, (x, y), 3, 255, -1)
+
+        n = 30
+        p = 40
+
+        # Puis pour chaque point des listes corners, on fait une fenêtre de taille (2N+1)x(2P+1)
+        # On stocke ces fenêtres dans deux listes contenant les intensités des
+        # points de cette fenêtre
+
+        blur1 = cv2.blur(self.img1, (3, 3), 0)
+        blur2 = cv2.blur(self.img2, (3, 3), 0)
+
+        list_windows1 = self.window_around(blur1, corners1, n, p)
+        list_windows2 = self.window_around(blur2, corners2, n, p)
+
+        # On initialise le maximum avec une valeur très élevée afin d'être sûr
+        # d'obtenir un minimum par la suite
+        max_similarity = 10000000000
+
+        # On va ensuite calculer la similarité de chaque combinaison possible de fenêtre de corner dans les deux images
+        # On ne gardera que les points extrêmes de chaque fenêtre minimisant la dissimilarité
+        for window1, point11, point12 in list_windows1:
+            for window2, point21, point22 in list_windows2:
+                similarity = self.cost(window1, window2)
+                if similarity < max_similarity:
+                    max_similarity = similarity
+                    image_1_top_left = point11
+                    image_1_bot_right = point12
+                    image_2_top_left = point21
+                    image_2_bot_right = point22
+
+                    self.plot_windows(self.img1, self.img2, image_1_top_left,
+                                      image_1_bot_right, image_2_top_left, image_2_bot_right)
+
+    @staticmethod
+    def corner_harris(source):
+        """
+        Question 1.1
+        Parameters
+        ----------
+        source
+
+        Returns
+        -------
+
+        """
+        dst = cv2.cornerHarris(source, 2, 3, 0.04)
+
+        # Threshold for an optimal value, it may vary depending on the image.
+        source[dst > 0.01 * dst.max()] = [0, 0, 255]
+
+        cv2.imshow('dst', source)
+        plt.show()
+
+        if cv2.waitKey(0) & 0xff == 27:
+            cv2.destroyAllWindows()
+
+        return dst
+
+    @staticmethod
+    def corner_sift(source):
+        """
+        Question 1.1
+        Parameters
+        ----------
+        source
+
+        Returns
+        -------
+
+        """
+        sift = cv2.xfeatures2d.SIFT_create()
+        kp = sift.detect(source, None)
+
+        img = cv2.drawKeypoints(source, kp, None)
+
+        plt.imshow(img)
+        plt.show()
+
+        return kp
+
+    @staticmethod
+    def corner_shi_tomasi(source):
+        """
+        Question 1.1
+        Parameters
+        ----------
+        source
+
+        Returns
+        -------
+
+        """
+        corners = cv2.goodFeaturesToTrack(source, 25, 0.01, 10)
+        corners = np.int0(corners)
+
+        for i in corners:
+            x, y = i.ravel()
+            cv2.circle(source, (x, y), 3, 255, -1)
+
+        return corners
+
+    @staticmethod
+    def cost(window1, window2, type="SAD"):
+        """
+
+        :param window1: la fenetre de l'image de gauche
+        :param window2: la fenetre de l'image de droite
+        :param type: le type de cout que l'on souhaite utiliser ici. Seulement SSD et SAD sont implementes
+        :return: resultat de la fonction de dissimilarite
+        """
+
+        if not len(window1) == len(window2) and len(window1[0]) == len(window2[0]):
+            print "Les fenetres n'ont pas la meme taille"
+            return KeyError
+
+        sum = 0.
+
+        for j in range(len(window1)):
+            for i in range(len(window1[0])):
+                if type == "SSD":
+                    sum += pow((window1[j][i] - window2[j][i]), 2)
+                elif type == "SAD":
+                    sum += abs(window1[j][i] - window2[j][i])
+                else:
+                    print "L'argument type n'est pas bon dans la fonction cost"
+                    raise KeyError
+
+        return sum
+
+    @staticmethod
+    def window_around(img, corners, n, p):
+        """
+        Question 1.2
+        Parameters
+        ----------
+        img: l'image initiale
+        corners: une liste de coordonnées de points autour desquelles on veut une fenêtre
+        n: la largeur de la fenêtre
+        p: la hauteur de la fenêtre
+        Returns
+        -------
+
+        """
+
+        list_of_windows = []
+
+        size_y, size_x = img.shape
+
+        for corner in corners:
+            x = corner[0][0]
+            y = corner[0][1]
+
+            # On vérifie qu'on ne sort pas de l'image
+            if x > n and y > p and x + n < size_x and y + p < size_y:
+                window = img[y - p:y + p + 1, x - n:x + n + 1]
+
+                list_of_windows.append(
+                    [window, (x - n, y - p), (x + n, y + p)])
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    gray = np.float32(gray)
-    dst = cv2.cornerHarris(gray, 2, 3, 0.04)
-
-    # Threshold for an optimal value, it may vary depending on the image.
-    img[dst > 0.01 * dst.max()] = [0, 0, 255]
-
-    cv2.imshow('dst', img)
-    # plt.show()
-    if cv2.waitKey(0) & 0xff == 27:
-        cv2.destroyAllWindows()
-
-    return dst
-
-
-# Question 1.1
-def corner_sift(source):
-    img = cv2.imread(source)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    sift = cv2.xfeatures2d.SIFT_create()
-    kp = sift.detect(gray, None)
-
-    img = cv2.drawKeypoints(gray, kp, None)
-
-    plt.imshow(img)
-    plt.show()
-
-    return kp
-
-
-# Question 1.1 (celui qu'on utilise effectivement dans la suite)
-def corner_shi_tomasi(source):
-    """
-    :param source: le chemin de l'image
-    :return: la liste des points selon la methode de shi_thomasi
-    """
-
-    img = cv2.imread(source)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    corners = cv2.goodFeaturesToTrack(gray, 25, 0.01, 10)
-    corners = np.int0(corners)
-
-    for i in corners:
-        x, y = i.ravel()
-        cv2.circle(img, (x, y), 3, 255, -1)
-
-    return corners
-
-
-# Question 1.2
-def calcul_similarite(source1, source2):
-    """
-
-    :param source1: le chemin de l'image de gauche
-    :param source2: le chemin de l'image de droite
-    :return: la fenetre de plus grande similarite entre les deux images
-    """
-
-    # Dans un premier temps on récupère la liste de tous les points
-    # d'importance des images 1 et 2
-
-    corners1 = corner_shi_tomasi(source1)
-    corners2 = corner_shi_tomasi(source2)
-
-    img1 = cv2.imread(source1, 0)
-    img2 = cv2.imread(source2, 0)
-
-    for corner in corners1:
-        x, y = corner.ravel()
-        cv2.circle(img1, (x, y), 3, 255, -1)
-    for corner in corners2:
-        x, y = corner.ravel()
-        cv2.circle(img2, (x, y), 3, 255, -1)
-
-    n = 30
-    p = 40
-
-    # Puis pour chaque point des listes corners, on fait une fenêtre de taille (2N+1)x(2P+1)
-    # On stocke ces fenêtres dans deux listes contenant les intensités des
-    # points de cette fenêtre
-
-    blur1 = cv2.blur(img1, (3,3), 0)
-    blur2 = cv2.blur(img2, (3,3), 0)
-
-    list_windows1 = window_around(blur1, corners1, n, p)
-    list_windows2 = window_around(blur2, corners2, n, p)
-
-    # On initialise le maximum avec une valeur très élevée afin d'être sûr
-    # d'obtenir un minimum par la suite
-    max_similarity = 10000000000
-
-    # On va ensuite calculer la similarité de chaque combinaison possible de fenêtre de corner dans les deux images
-    # On ne gardera que les points extrêmes de chaque fenêtre minimisant la
-    # dissimilarité
-    for window1, point11, point12 in list_windows1:
-        for window2, point21, point22 in list_windows2:
-            similarity = cost(window1, window2, "SAD")
-            if similarity < max_similarity:
-                max_similarity = similarity
-                image_1_top_left = point11
-                image_1_bot_right = point12
-                image_2_top_left = point21
-                image_2_bot_right = point22
-
-    plot_windows(source1, source2, image_1_top_left,
-                             image_1_bot_right, image_2_top_left, image_2_bot_right)
-
-
-# Question 1.2
-def plot_windows(source1, source2, image_1_top_left, image_1_bot_right, image_2_top_left, image_2_bot_right):
-    """
-
-    :param source1: La source de l'image de gauche
-    :param source2: La source de l'image de droite
-
-    Les autres parmetres sont les point extreme des deux rectangles a afficher
-    :return:
-    """
-
-    #  On dessine des rectanges pour montrer la localistaion de ces fenêtres
-
-    img1 = cv2.imread(source1, 0)
-    img2 = cv2.imread(source2, 0)
-
-    cv2.rectangle(img1, image_1_top_left, image_1_bot_right, (255, 0, 0), 5)
-    cv2.rectangle(img2, image_2_top_left, image_2_bot_right, (255, 0, 0), 5)
-
-    #  On affiche ces deux fenetres
-    plt.title("Meilleure similarite entre les images")
-    plt.subplot(121), plt.imshow(img1, cmap='gray')
-    plt.title('Image 1'), plt.xticks([]), plt.yticks([])
-    plt.subplot(122), plt.imshow(img2, cmap='gray')
-    plt.title('Image 2'), plt.xticks([]), plt.yticks([])
-
-    plt.show()
-
-
-# Question 1.2
-def cost(window1, window2, type="SAD"):
-    """
-
-    :param window1: la fenetre de l'image de gauche
-    :param window2: la fenetre de l'image de droite
-    :param type: le type de cout que l'on souhaite utiliser ici. Seulement SSD et SAD sont implementes
-    :return: resultat de la fonction de dissimilarite
-    """
-
-    if not len(window1) == len(window2) and len(window1[0]) == len(window2[0]):
-        print "Les fenetres n'ont pas la meme taille"
-        return KeyError
-
-    sum = 0.
-
-    for j in range(len(window1)):
-        for i in range(len(window1[0])):
-            if type == "SSD":
-                sum += pow((window1[j][i] - window2[j][i]), 2)
-            elif type == "SAD":
-                sum += abs(window1[j][i] - window2[j][i])
-            else:
-                print "L'argument type n'est pas bon dans la fonction cost"
-                raise KeyError
-
-    return sum
-
-
-# Question 1.2
-def window_around(img, corners, n, p):
-    """
-        Cette fonction prend en argument    img = l'image initiale
-                                            corners = une liste de coordonnees de points autour desquelles on veut une fenetre
-                                            n = la largeur de la fenetre
-                                            p = la hauteur de la fenetre
-    """
-
-    list_of_windows = []
-
-    size_y, size_x = img.shape
-
-    for corner in corners:
-        x = corner[0][0]
-        y = corner[0][1]
-
-        # On verifie qu'on ne sort pas de l'image
-        if x > n and y > p and x + n < size_x and y + p < size_y:
-            window = img[y - p:y + p + 1, x - n:x + n + 1]
-
-            list_of_windows.append(
-                [window, (x - n, y - p), (x + n, y + p)])
-
-    return list_of_windows
-
-
-# Question 1.3
-def bfmatcher(source1, source2):
-    img1 = cv2.imread(source1, 0)  # queryImage
-    img2 = cv2.imread(source2, 0)  # trainImage
-
-    # Initiate SIFT detector
-    orb = cv2.ORB_create()
-    cv2.ocl.setUseOpenCL(False)
-
-    # find the keypoints and descriptors with SIFT
-    kp1, des1 = orb.detectAndCompute(img1, None)
-    kp2, des2 = orb.detectAndCompute(img2, None)
-
-    # create BFMatcher object
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-
-    # Match descriptors.
-    matches = bf.match(des1, des2)
-
-    # Sort them in the order of their distance.
-    matches = sorted(matches, key=lambda x: x.distance)
-
-    # Draw first 10 matches.
-    img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches[:10], None, flags=2)
-
-    plt.imshow(img3), plt.show()
-
-
-# Question 1.3
-def flannmatcher(source1, source2):
-    # FIXME: soucis sur Ubuntu, OpenCV 3.1.0. Il semblerait que ce soit un bug
-    # https://github.com/Itseez/opencv/issues/5667
-    # Update : même soucis sur Mac. C'est bien lié à OpenCV
-
-    img1 = cv2.imread(source1, 0)  # queryImage
-    img2 = cv2.imread(source2, 0)  # trainImage
-
-    # Initiate SIFT detector
-    sift = cv2.xfeatures2d.SIFT_create()
-
-    # find the keypoints and descriptors with SIFT
-    kp1, des1 = sift.detectAndCompute(img1, None)
-    kp2, des2 = sift.detectAndCompute(img2, None)
-
-    # FLANN parameters
-    FLANN_INDEX_KDTREE = 0
-    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-    search_params = dict(checks=50)  # or pass empty dictionary
-
-    flann = cv2.FlannBasedMatcher(index_params, search_params)
-
-    matches = flann.knnMatch(des1, des2, k=2)
-
-    # Need to draw only good matches, so create a mask
-    matchesMask = [[0, 0] for i in xrange(len(matches))]
-
-    # ratio test as per Lowe's paper
-    for i, (m, n) in enumerate(matches):
-        if m.distance < 0.7 * n.distance:
-            matchesMask[i] = [1, 0]
-
-    draw_params = dict(matchColor=(0, 255, 0),
-                       singlePointColor=(255, 0, 0),
-                       matchesMask=matchesMask,
-                       flags=0)
-
-    img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, matches, None, **draw_params)
-
-    plt.imshow(img3, ), plt.show()
+        return list_of_windows
+
+    @staticmethod
+    def plot_windows(source1, source2, image_1_top_left, image_1_bot_right, image_2_top_left, image_2_bot_right):
+        """
+
+        Parameters
+        ----------
+        source1: La source de l'image de gauche
+        source2: La source de l'image de droite
+        Les autres parmètres sont les points extrêmes des deux rectangles à afficher
+        """
+
+        #  On dessine des rectangles pour montrer la localisation de ces fenêtres
+        cv2.rectangle(source1, image_1_top_left, image_1_bot_right, (255, 0, 0), 5)
+        cv2.rectangle(source2, image_2_top_left, image_2_bot_right, (255, 0, 0), 5)
+
+        #  On affiche ces deux fenêtres
+        plt.title("Meilleure similarite entre les images")
+        plt.subplot(121), plt.imshow(source1, cmap='gray')
+        plt.title('Image 1'), plt.xticks([]), plt.yticks([])
+        plt.subplot(122), plt.imshow(source2, cmap='gray')
+        plt.title('Image 2'), plt.xticks([]), plt.yticks([])
+
+        plt.show()
+
+    @staticmethod
+    def bf_matcher(source1, source2):
+        """
+        Question 1.3
+
+        Parameters
+        ----------
+        source1
+        source2
+
+        Returns
+        -------
+
+        """
+        # Initiate SIFT detector
+        orb = cv2.ORB_create()
+        cv2.ocl.setUseOpenCL(False)
+
+        # find the keypoints and descriptors with SIFT
+        kp1, des1 = orb.detectAndCompute(source1, None)
+        kp2, des2 = orb.detectAndCompute(source2, None)
+
+        # create BFMatcher object
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+
+        # Match descriptors.
+        matches = bf.match(des1, des2)
+
+        # Sort them in the order of their distance.
+        matches = sorted(matches, key=lambda x: x.distance)
+
+        # Draw first 10 matches.
+        img3 = cv2.drawMatches(source1, kp1, source2, kp2, matches[:10], None, flags=2)
+
+        plt.imshow(img3), plt.show()
+
+    @staticmethod
+    def flann_matcher(source1, source2):
+        """
+        Question 1.3
+
+        Soucis sur Ubuntu, OpenCV 3.1.0. Il semblerait que ce soit un bug
+        https://github.com/Itseez/opencv/issues/5667
+        Update : même soucis sur Mac. C'est bien lié à OpenCV
+        Parameters
+        ----------
+        source1
+        source2
+
+        Returns
+        -------
+
+        """
+
+        # Initiate SIFT detector
+        sift = cv2.xfeatures2d.SIFT_create()
+
+        # find the keypoints and descriptors with SIFT
+        kp1, des1 = sift.detectAndCompute(source1, None)
+        kp2, des2 = sift.detectAndCompute(source2, None)
+
+        # FLANN parameters
+        FLANN_INDEX_KDTREE = 0
+        index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+        search_params = dict(checks=50)  # or pass empty dictionary
+
+        flann = cv2.FlannBasedMatcher(index_params, search_params)
+
+        matches = flann.knnMatch(des1, des2, k=2)
+
+        # Need to draw only good matches, so create a mask
+        matchesMask = [[0, 0] for i in xrange(len(matches))]
+
+        # ratio test as per Lowe's paper
+        for i, (m, n) in enumerate(matches):
+            if m.distance < 0.7 * n.distance:
+                matchesMask[i] = [1, 0]
+
+        draw_params = dict(matchColor=(0, 255, 0),
+                           singlePointColor=(255, 0, 0),
+                           matchesMask=matchesMask,
+                           flags=0)
+
+        img3 = cv2.drawMatchesKnn(source1, kp1, source2, kp2, matches, None, **draw_params)
+
+        plt.imshow(img3, ), plt.show()
 
 
 class HomemadeHarris:
@@ -292,7 +336,7 @@ class HomemadeHarris:
     Question 2
     """
 
-    def __init__(self, source, seuil_sobel=5, smoothing_factor=(5, 5), window_size=3, nb_best_points=200):
+    def __init__(self, source, seuil_sobel=5, smoothing_factor=(1, 1), window_size=3, nb_best_points=10000):
         self.source = source
         self.img = cv2.imread(source, 0)
 
@@ -378,7 +422,7 @@ class HomemadeHarris:
             cv2.circle(self.img, (x, y), 1, 255, 1)
 
         plt.subplot(121), plt.imshow(self.img, cmap='gray')
-        plt.title('Image initiale superposee avec la transformation de Harris'), plt.xticks([]), plt.yticks([])
+        plt.title('Image initiale supperposee avec la transformation de Harris'), plt.xticks([]), plt.yticks([])
         plt.subplot(122), plt.imshow(self.img_harris, cmap='gray')
         plt.title('Image avec transformation de Harris'), plt.xticks(
             []), plt.yticks([])
@@ -399,7 +443,7 @@ class HomemadeHarris:
         return img_harris
 
     @staticmethod
-    def local_maxima(img, size=3):
+    def local_maxima(img, size):
         """
         Ne garde que les maxima locaux d'une image (numpy array) pour une taille de voisinage donnée
 
@@ -436,7 +480,6 @@ class HomemadeHarris:
 
         return result
 
-
     @staticmethod
     def insertion_sort(array, n):
         """
@@ -471,9 +514,9 @@ class HomemadeHarris:
         return index_list[::-1][:n], sorted_list[::-1][:n]
 
 
-
 if __name__ == "__main__":
-    calcul_similarite(michelangelo_origin, michelangelo_tilt)
-    bfmatcher(graf1, graf2)
-    homemade_harris = HomemadeHarris(filename1, window_size=10)
-    homemade_harris.plot()
+    image_matcher = ImageMatcher(michelangelo_origin, michelangelo_tilt)
+    image_matcher.calcul_similarite()
+
+    # homemade_harris = HomemadeHarris(bike1, window_size=10)
+    # homemade_harris.plot()
