@@ -52,15 +52,19 @@ class ImageMatcher:
         corners1 = self.corner_method(self.img1)
         corners2 = self.corner_method(self.img2)
 
+        print 1
+
         for corner in corners1:
             x, y = corner.ravel()
-            cv2.circle(self.img1, (x, y), 3, 255, -1)
+            cv2.circle(self.img1, (x, y), 1, 255, -1)
         for corner in corners2:
             x, y = corner.ravel()
-            cv2.circle(self.img2, (x, y), 3, 255, -1)
+            cv2.circle(self.img2, (x, y), 1, 255, -1)
 
-        n = 30
-        p = 40
+        n = 10
+        p = 15
+
+        print 2
 
         # Puis pour chaque point des listes corners, on fait une fenêtre de taille (2N+1)x(2P+1)
         # On stocke ces fenêtres dans deux listes contenant les intensités des
@@ -76,10 +80,17 @@ class ImageMatcher:
         # d'obtenir un minimum par la suite
         max_similarity = 10000000000
 
+        c = 0
+
         # On va ensuite calculer la similarité de chaque combinaison possible de fenêtre de corner dans les deux images
         # On ne gardera que les points extrêmes de chaque fenêtre minimisant la dissimilarité
         for window1, point11, point12 in list_windows1:
             for window2, point21, point22 in list_windows2:
+
+                c += 1
+                per = c /float((len(list_windows1)*len(list_windows2))) * 100.
+                print c, " - ", len(list_windows1)*len(list_windows2), "   ", per, "%"
+
                 similarity = self.cost(window1, window2)
                 if similarity < max_similarity:
                     max_similarity = similarity
@@ -88,8 +99,12 @@ class ImageMatcher:
                     image_2_top_left = point21
                     image_2_bot_right = point22
 
-                    self.plot_windows(self.img1, self.img2, image_1_top_left,
-                                      image_1_bot_right, image_2_top_left, image_2_bot_right)
+                    print image_1_bot_right
+                    print image_1_top_left
+
+        self.plot_windows(self.img1, self.img2, image_1_top_left, image_1_bot_right, image_2_top_left,
+                          image_2_bot_right)
+        print 4
 
     @staticmethod
     def corner_harris(source):
@@ -106,15 +121,16 @@ class ImageMatcher:
         dst = cv2.cornerHarris(source, 2, 3, 0.04)
 
         # Threshold for an optimal value, it may vary depending on the image.
-        source[dst > 0.01 * dst.max()] = [0, 0, 255]
+        dst[dst < 0.001 * dst.max()] = 0
 
-        cv2.imshow('dst', source)
-        plt.show()
+        corner = []
+        for index, x in np.ndenumerate(dst):
+            if x > 0.0001:
+                corner.append([[index[1], index[0]]])
 
-        if cv2.waitKey(0) & 0xff == 27:
-            cv2.destroyAllWindows()
+        corner = np.array(corner)
 
-        return dst
+        return corner
 
     @staticmethod
     def corner_sift(source):
@@ -131,12 +147,13 @@ class ImageMatcher:
         sift = cv2.xfeatures2d.SIFT_create()
         kp = sift.detect(source, None)
 
-        img = cv2.drawKeypoints(source, kp, None)
+        corner = []
+        for point in kp:
+            corner.append([[int(point.pt[0]), int(point.pt[1])]])
 
-        plt.imshow(img)
-        plt.show()
+        corner = np.array(corner)
 
-        return kp
+        return corner
 
     @staticmethod
     def corner_shi_tomasi(source):
@@ -170,20 +187,29 @@ class ImageMatcher:
         """
 
         if not len(window1) == len(window2) and len(window1[0]) == len(window2[0]):
-            print "Les fenetres n'ont pas la meme taille"
+            print "Les fenêtres n'ont pas la même taille"
             return KeyError
 
         sum = 0.
 
-        for j in range(len(window1)):
-            for i in range(len(window1[0])):
-                if type == "SSD":
-                    sum += pow((window1[j][i] - window2[j][i]), 2)
-                elif type == "SAD":
-                    sum += abs(window1[j][i] - window2[j][i])
-                else:
-                    print "L'argument type n'est pas bon dans la fonction cost"
-                    raise KeyError
+        if type == "SSD":
+            sum += np.sum(np.power(window1-window2, 2))
+        elif type == "SAD":
+            sum += np.sum(window1-window2)
+
+        else:
+            print "L'argument type n'est pas bon dans la fonction cost"
+            raise KeyError
+
+        # for j in range(len(window1)):
+        #     for i in range(len(window1[0])):
+        #         if type == "SSD":
+        #             sum += pow((window1[j][i] - window2[j][i]), 2)
+        #         elif type == "SAD":
+        #             sum += abs(window1[j][i] - window2[j][i])
+        #         else:
+        #             print "L'argument type n'est pas bon dans la fonction cost"
+        #             raise KeyError
 
         return sum
 
@@ -515,7 +541,8 @@ class HomemadeHarris:
 
 
 if __name__ == "__main__":
-    image_matcher = ImageMatcher(michelangelo_origin, michelangelo_tilt)
+    image_matcher = ImageMatcher(bike1, bike2, corner_method="harris")
+    # image_matcher = ImageMatcher(michelangelo_origin, michelangelo_tilt)
     image_matcher.calcul_similarite()
 
     # homemade_harris = HomemadeHarris(bike1, window_size=10)
