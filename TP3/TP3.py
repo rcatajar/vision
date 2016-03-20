@@ -5,6 +5,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage import maximum_filter
 
+
+'''
+Introduction a la vision par ordinateur
+TP 3 : Extraction de caractéristiques et mise en correspondance
+Code testé avec OpenCV 3.1.0 et python 2.7.11
+
+Thibault KASPI
+thibault.kaspi@student.ecp.fr
+'''
+
 bike1 = 'points/bikes/img_7073.ppm'
 bike2 = 'points/bikes/img_7075.ppm'
 bike3 = 'points/bikes/img_7077.ppm'
@@ -20,11 +30,13 @@ class ImageMatcher:
     """
     Question 1
     """
-    def __init__(self, source1, source2, corner_method="shi_tomasi"):
+    def __init__(self, source1, source2, corner_method="shi_tomasi", type="SAD"):
 
         # On importe les images, et on les convertit directement en nuances de gris
         self.img1 = cv2.imread(source1, 0)
         self.img2 = cv2.imread(source2, 0)
+
+        self.type = type
 
         # Pour passer la méthode qu'on veux utiliser, on utilise un dictionnaire
         switcher = {
@@ -44,6 +56,8 @@ class ImageMatcher:
 
         # On prend la fonction du dictionnaire
         self.corner_method = switcher.get(switch, lambda: "nothing")
+
+        # self.bf_matcher(self.img1, self.img2)
 
     def calcul_similarite(self, n=20, p=30):
         """
@@ -82,14 +96,12 @@ class ImageMatcher:
         # d'obtenir un minimum par la suite
         max_similarity = 10000000000
 
-        c = 0
-
         # On va ensuite calculer la similarité de chaque combinaison possible de fenêtre de corner dans les deux images
         # On ne gardera que les points extrêmes de chaque fenêtre minimisant la dissimilarité
         for window1, point11, point12 in list_windows1:
             for window2, point21, point22 in list_windows2:
 
-                similarity = self.cost(window1, window2)
+                similarity = self.cost(window1, window2, type=self.type)
                 if similarity < max_similarity:
                     max_similarity = similarity
                     print max_similarity
@@ -102,6 +114,7 @@ class ImageMatcher:
                     if max_similarity < 150000:
                         self.plot_windows(self.img1, self.img2, image_1_top_left, image_1_bot_right, image_2_top_left,
                               image_2_bot_right)
+        print "similarité finale : ", max_similarity
 
     @staticmethod
     def corner_harris(source):
@@ -186,7 +199,7 @@ class ImageMatcher:
         return corners
 
     @staticmethod
-    def cost(window1, window2, type="SAD"):
+    def cost(window1, window2, type):
         """
         Question 1.2
 
@@ -274,7 +287,7 @@ class ImageMatcher:
         cv2.rectangle(source2, image_2_top_left, image_2_bot_right, (255, 0, 0), 5)
 
         #  On affiche ces deux fenêtres
-        plt.title("Meilleure similarite entre les images")
+        plt.title("Meilleures similarites entre les images")
         plt.subplot(121), plt.imshow(source1, cmap='gray')
         plt.title('Image 1'), plt.xticks([]), plt.yticks([])
         plt.subplot(122), plt.imshow(source2, cmap='gray')
@@ -409,7 +422,7 @@ class HomemadeHarris:
 
     def gaussian_blur(self, smoothing_factor):
         """
-        On calcule puis on lisse Ix2 , Ix2 et Ixy avec un filtre gaussien
+        On calcule puis on lisse Ix2 , Iy2 et Ixy avec un filtre gaussien
 
         Parameters
         ----------
@@ -552,8 +565,8 @@ class HomemadeHarris:
 
 
 if __name__ == "__main__":
-    image_matcher = ImageMatcher(michelangelo_origin, michelangelo_tilt, corner_method="sift")
-    image_matcher.calcul_similarite()
+    # image_matcher = ImageMatcher(michelangelo_tilt, michelangelo_origin, corner_method="sift", type="SSD")
+    # image_matcher.calcul_similarite()
 
-    # homemade_harris = HomemadeHarris(bike1, window_size=10)
-    # homemade_harris.plot()
+    homemade_harris = HomemadeHarris(bike1, window_size=10, smoothing_factor=(3, 3), nb_best_points=100000)
+    homemade_harris.plot()
